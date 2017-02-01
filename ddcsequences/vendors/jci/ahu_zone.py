@@ -5,10 +5,9 @@
 #
 # Licensed under LGPLv3, see file LICENSE in this source tree.
 from ...sequence import Sequence
-from .utils import ZNT_State, Econo_and_Mech, DAT_State, Reheat, Dampers, AHU_Cooling, SupplyFan, GEF, Relief_Fan
+from .utils import ZNT_State, Econo_and_Mech, DAT_State, Reheat, Dampers, AHU_Cooling, SupplyFan, GEF, Relief_Fan, MASD_State, Sensors_Feedback
 
-
-class AHU(Sequence, ZNT_State, Econo_and_Mech, DAT_State, Reheat, Dampers, AHU_Cooling, SupplyFan, GEF, Relief_Fan):
+class AHU(Sequence, ZNT_State, Econo_and_Mech, DAT_State, Reheat, Dampers, AHU_Cooling, SupplyFan, GEF, Relief_Fan, MASD_State, Sensors_Feedback):
     """
     Basic tests done on a AHU
     """
@@ -16,12 +15,31 @@ class AHU(Sequence, ZNT_State, Econo_and_Mech, DAT_State, Reheat, Dampers, AHU_C
         super(AHU, self).__init__(controller)
         self.controller['DA-T'] = 20
         self.controller['BLDG-P'] = 0
-        self.controller['GEF-S'] = False
+        self.controller['ZN-T'] = 22        
         self.controller['RA-H'] = 30
-        self.controller['RA-T'] = 21
-        self.controller['RLF-S'] = False
+        self.controller['OA-T'] = 20
+
+        self.controller['RA-T'].match_value(self.fake_rat)
+        self.controller['DA-T'].match_value(self.dat_feedback)
+        
+        # Expansion disconnected
+        self.controller['HTG1-C'].out_of_service()
+        self.controller['HTG2-C'].out_of_service()
+        
+        # Reset evrything
+        self.controller['SYS-RESET'] = 'Reset'
+        self.controller['TUNING-RESET'] = True
+        self.controller['SYS-RESET'] = 'Off'
+        self.controller['TUNING-RESET'] = False
+        # Fan status
         self.controller['SF-S'].match(self.controller['SF-C'])
-        self.controller['ZN-T'] = 22
+        self.controller['RLF-S'].match(self.controller['RLF-C'])
+        self.controller['GEF-S'].match(self.controller['GEF-C'])
+        
+
+        self.define_task(self.test_AHU)
+        print('Use start() to begin process')
+    
         
     def test_AHU(self):
         self.note("Let's begin")

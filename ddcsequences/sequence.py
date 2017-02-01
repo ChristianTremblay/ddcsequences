@@ -8,70 +8,77 @@
 This modules contains helper functions to be used with BAC0 to test
 DDC Sequences of operation
 """
-import time
-import BAC0.core.devices.Device as BAC0_device
+from threading import Thread
+from . import ddclog
+
+from collections import deque
+import logging
+
 
 class Sequence(object):
-    def __init__(self, controller):
-        if controller is BAC0_device:
-            self.controller = controller
-        else:
-            raise TypeError('Controller must be a BAC0 device')
-        
-    def note(self, text):
-        self.controller.notes = text
-        print(text)
-    
-        
-    def wait_for_state(self, variable, state, callback = None, timeout=90):
-        tout = time.time() + timeout
-        while True:
-            if variable == state:
-                self.note = '%s is now %s' % (variable, state)
-                break
-            elif time.time() > tout:
-                raise TimeoutError('Wrong state after waiting a long time.')
-            time.sleep(2)
-        # State is now correct, execute callback
-        if callback is not None:
-            callback()
-    
-       
-    def wait_for_state_not(self, variable, state, callback = None, timeout=90):
-        tout = time.time() + timeout
-        while True:
-            if variable != state:
-                self.note = '%s is no more %s' % (variable, state)
-                break
-            elif time.time() > tout:
-                raise TimeoutError('Same state after waiting a long time.')
-            time.sleep(2)
-        # State is now correct, execute callback
-        if callback is not None:
-            callback()        
-            
-    def wait_for_value_gt(self, variable, value, callback = None, timeout=90):
-        tout = time.time() + timeout
-        while True:
-            if variable > value:
-                self.note = '%s is greater than %s' % (variable, value)
-                break
-            elif time.time() > tout:
-                raise TimeoutError('Variable not yet greater than value after timeout')
-            time.sleep(2)
-        # State is now correct, execute callback
-        if callback is not None:
-            callback()        
+    def __init__(self, name = None):
 
-    def wait_for_value_lt(self, variable, value, callback = None, timeout=90):
-        tout = time.time() + timeout
-        while True:
-            if variable < value:
-                self.note = '%s is less than %s' % (variable, value)
-                break
-            elif time.time() > tout:
-                raise TimeoutError('Variable not yet less than value after timeout')
-            time.sleep(2)
-        # State is now correct, execute callback
-        if callback is not None:
-            callback()
+        if name:
+            self._create_logger(name)
+        else:
+            raise NameError('You must give a name to the sequence')
+        self.tasks_processor = Tasks_Processor()
+        self.start()
+        
+    def _create_logger(self, name):
+        self.log = ddclog.createLogger('sequence', filename = name)
+        self.log.info('log (sequence) has been created. Use log.level(message) to add something')
+        fh = self.log.handlers[0]
+        fn = fh.baseFilename
+        self.log.info('A file with all logs can be found here : %s' % fn)
+    
+    def add_task(self, task, *, name = 'unknown'):
+        self.tasks_processor.add_task(task, name)
+    
+    @property    
+    def tasks(self):
+        return self._tasks
+        
+    def start(self):
+        self.tasks_processor.start()
+
+    def stop(self):
+        self.tasks_processor.stop()  
+        self.tasks_processor.join()
+        
+
+            
+class Tasks_Processor(Thread):
+
+        # Init thread running server
+        def __init__(self,*, daemon = True):
+            Thread.__init__(self, daemon = daemon)
+            self._tasks = deque()
+            self.exitFlag = False
+            self.log = logging.getLogger('sequence')
+            
+        def add_task(self, task, name = 'unknown'):
+            self.log.debug('Added task : %s' % name)
+            self._tasks.append((task, name))
+            
+        def run(self):
+            self.log.debug('Starting task processor')
+            self.process()
+    
+        def process(self):
+            while not self.exitFlag:
+            #    self.task()
+                while self._tasks:
+                    task, name = self._tasks.popleft()
+                    self.log.info('Running : %s' % name)
+                    task()
+
+        def stop(self):
+            self.log.debug('Stopping task processor')
+            self.exitFlag = True
+    
+        def beforeStop(self):
+            """
+            Action done when closing thread
+            """
+            pass
