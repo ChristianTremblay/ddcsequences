@@ -27,17 +27,27 @@ class Sequence(object):
         
     def _create_logger(self, name):
         self.log = ddclog.createLogger('sequence', filename = name)
-        self.log.info('log (sequence) has been created. Use log.level(message) to add something')
+        self.log.info('\n \
+                       =====================================================\n \
+                       =               MESSAGE TO READER                   =\n \
+                       =====================================================\n \
+                      \n \
+                      This log will hold every note on the test sequence.\n \
+                      In the Jupyter Notebook, every usage of log.level(message)\n \
+                      will add something to this log.\n \
+                      By default, "- INFO -" means the test is succesful.\n \
+                      "- ERROR -" will indicate problems in the test and inform you of the trouble\n \
+                      In the Notebook, only ERROR will show.\n')
         fh = self.log.handlers[0]
         fn = fh.baseFilename
-        self.log.info('A file with all logs can be found here : %s' % fn)
+        self.log.info('A file with all logs can be found here : %s\n' % fn)
     
     def add_task(self, task, *, name = 'unknown'):
         self.tasks_processor.add_task(task, name)
     
     @property    
     def tasks(self):
-        return self._tasks
+        return self.tasks_processor._tasks
         
     def start(self):
         self.tasks_processor.start()
@@ -46,6 +56,16 @@ class Sequence(object):
         self.tasks_processor.stop()  
         self.tasks_processor.join()
         
+    @property 
+    def progress(self):
+        task_list, processing = self.tasks_processor.tasks_to_process()
+        if processing[0]:
+            if task_list:
+                return "Processing %s. Next tasks : %s" % (processing[1], task_list)
+            else:
+                return "Processing %s. Nothing more to do." % (processing[1])
+        else:
+            return "Nothing to process"
 
             
 class Tasks_Processor(Thread):
@@ -56,10 +76,17 @@ class Tasks_Processor(Thread):
             self._tasks = deque()
             self.exitFlag = False
             self.log = logging.getLogger('sequence')
+            self.processing = [False, ""]
             
         def add_task(self, task, name = 'unknown'):
             self.log.debug('Added task : %s' % name)
             self._tasks.append((task, name))
+            
+        def tasks_to_process(self):
+            tasks_list = []
+            for each in self._tasks:
+                tasks_list.append(each[1])
+            return (tasks_list, self.processing)
             
         def run(self):
             self.log.debug('Starting task processor')
@@ -70,8 +97,13 @@ class Tasks_Processor(Thread):
             #    self.task()
                 while self._tasks:
                     task, name = self._tasks.popleft()
-                    self.log.info('Running : %s' % name)
+                    self.processing = [True, name]
+                    self.log.info('\n \
+                                   ==========================================\n \
+                                   = Running : %s\n \
+                                   ==========================================' % name)
                     task()
+                self.processing = [False, ""]
 
         def stop(self):
             self.log.debug('Stopping task processor')
