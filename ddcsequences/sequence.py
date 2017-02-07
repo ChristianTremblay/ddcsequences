@@ -9,20 +9,18 @@ This modules contains helper functions to be used with BAC0 to test
 DDC Sequences of operation
 """
 from threading import Thread
+import queue
 from . import ddclog
 
-from collections import deque
 import logging
-
 
 class Sequence(object):
     def __init__(self, name = None):
-
         if name:
             self._create_logger(name)
         else:
             raise NameError('You must give a name to the sequence')
-        self.tasks_processor = Tasks_Processor()
+        
         self.start()
         
     def _create_logger(self, name):
@@ -43,18 +41,25 @@ class Sequence(object):
         self.log.info('A file with all logs can be found here : %s\n' % fn)
     
     def add_task(self, task, *, name = 'unknown'):
-        self.tasks_processor.add_task(task, name)
+        try:
+            self.tasks_processor.add_task(task, name)
+        except AttributeError:
+            self.log.critical('sequence not running, use start()')
     
     @property    
     def tasks(self):
         return self.tasks_processor._tasks
         
     def start(self):
-        self.tasks_processor.start()
+        try:
+            self.tasks_processor.start()
+        except AttributeError:
+            self.tasks_processor = Tasks_Processor()
+            self.start()
 
     def stop(self):
-        self.tasks_processor.stop()  
-        self.tasks_processor.join()
+        self.tasks_processor.stop()
+        del self.tasks_processor
         
     @property 
     def progress(self):
@@ -73,18 +78,18 @@ class Tasks_Processor(Thread):
         # Init thread running server
         def __init__(self,*, daemon = True):
             Thread.__init__(self, daemon = daemon)
-            self._tasks = deque()
+            self._tasks = queue.Queue()
             self.exitFlag = False
             self.log = logging.getLogger('sequence')
             self.processing = [False, ""]
             
         def add_task(self, task, name = 'unknown'):
             self.log.debug('Added task : %s' % name)
-            self._tasks.append((task, name))
+            self._tasks.put((task, name))
             
         def tasks_to_process(self):
             tasks_list = []
-            for each in self._tasks:
+            for each in self._tasks.queue:
                 tasks_list.append(each[1])
             return (tasks_list, self.processing)
             
@@ -96,13 +101,18 @@ class Tasks_Processor(Thread):
             while not self.exitFlag:
             #    self.task()
                 while self._tasks:
-                    task, name = self._tasks.popleft()
-                    self.processing = [True, name]
+                    task, name = self._tasks.get()
+                    log = logging.getLogger('sequence.%s' % name)
+                    print(log.name)
+                    self.processing = [True, name]  
                     self.log.info('\n \
                                    ==========================================\n \
                                    = Running : %s\n \
                                    ==========================================' % name)
                     task()
+                    self._tasks.task_done()
+                    log = logging.getLogger('sequence')
+                    
                 self.processing = [False, ""]
 
         def stop(self):

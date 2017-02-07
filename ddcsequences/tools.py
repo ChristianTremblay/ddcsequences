@@ -18,7 +18,7 @@ def var_name(variable):
         # Will work if variable is a BAC0 point
         prop = variable.properties
         name = '%s (%s)' % (prop.name, prop.description)
-    except TypeError:
+    except AttributeError:
         name = "(name not found)"
     return name
    
@@ -106,5 +106,5 @@ def format_variable_value(variable):
             return variable.boolValue
         elif 'analog' in var_type:            
             return '%.2f %s' % (variable.value, var_prop.units_state)    
-    except TypeError:
+    except AttributeError:
         return variable    
