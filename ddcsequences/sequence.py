@@ -15,11 +15,16 @@ from . import ddclog
 import logging
 
 class Sequence(object):
+    """
+    This object stores all the tasks needed to simulate and test the sequence.
+    It also contains everything to create the log file that will hold every 
+    actions, task and comment made during the tests.
+    """
     def __init__(self, name = None):
         if name:
             self._create_logger(name)
         else:
-            raise NameError('You must give a name to the sequence')
+            raise NameError('You must give a name to the sequence of operation')
         
         self.start()
         
@@ -74,53 +79,60 @@ class Sequence(object):
 
             
 class Tasks_Processor(Thread):
+    """
+    Task processor is a thread that will execute tasks one after another.
+    Task are sent to the sequence object and executed as soon as possible.
+    """
 
-        # Init thread running server
-        def __init__(self,*, daemon = True):
-            Thread.__init__(self, daemon = daemon)
-            self._tasks = queue.Queue()
-            self.exitFlag = False
-            self.log = logging.getLogger('sequence')
+    # Init thread running server
+    def __init__(self,*, daemon = True):
+        Thread.__init__(self, daemon = daemon)
+        self._tasks = queue.Queue()
+        self.exitFlag = False
+        self.log = logging.getLogger('sequence')
+        self.processing = [False, ""]
+        
+    def add_task(self, task, name = 'unknown'):
+        self.log.debug('Added task : %s' % name)
+        self._tasks.put((task, name))
+        
+    def tasks_to_process(self):
+        tasks_list = []
+        for each in self._tasks.queue:
+            tasks_list.append(each[1])
+        return (tasks_list, self.processing)
+        
+    def run(self):
+        self.log.debug('Starting task processor')
+        self.process()
+
+    def process(self):
+        """
+        Main loop executing tasks.
+        """
+        while not self.exitFlag:
+        #    self.task()
+            while self._tasks:
+                task, name = self._tasks.get()
+                log = logging.getLogger('sequence.%s' % name)
+                print(log.name)
+                self.processing = [True, name]  
+                self.log.info('\n \
+                               ==========================================\n \
+                               = Running : %s\n \
+                               ==========================================' % name)
+                task()
+                self._tasks.task_done()
+                log = logging.getLogger('sequence')
+                
             self.processing = [False, ""]
-            
-        def add_task(self, task, name = 'unknown'):
-            self.log.debug('Added task : %s' % name)
-            self._tasks.put((task, name))
-            
-        def tasks_to_process(self):
-            tasks_list = []
-            for each in self._tasks.queue:
-                tasks_list.append(each[1])
-            return (tasks_list, self.processing)
-            
-        def run(self):
-            self.log.debug('Starting task processor')
-            self.process()
-    
-        def process(self):
-            while not self.exitFlag:
-            #    self.task()
-                while self._tasks:
-                    task, name = self._tasks.get()
-                    log = logging.getLogger('sequence.%s' % name)
-                    print(log.name)
-                    self.processing = [True, name]  
-                    self.log.info('\n \
-                                   ==========================================\n \
-                                   = Running : %s\n \
-                                   ==========================================' % name)
-                    task()
-                    self._tasks.task_done()
-                    log = logging.getLogger('sequence')
-                    
-                self.processing = [False, ""]
 
-        def stop(self):
-            self.log.debug('Stopping task processor')
-            self.exitFlag = True
-    
-        def beforeStop(self):
-            """
-            Action done when closing thread
-            """
-            pass
+    def stop(self):
+        self.log.debug('Stopping task processor')
+        self.exitFlag = True
+
+    def beforeStop(self):
+        """
+        Action done when closing thread
+        """
+        pass
