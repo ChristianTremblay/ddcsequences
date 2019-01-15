@@ -11,8 +11,10 @@ DDC Sequences of operation
 import time
 import logging
 import pandas as pd
+import numpy as np
 
-log = logging.getLogger('sequence')
+log = logging.getLogger("sequence")
+
 
 def var_name(point):
     """
@@ -25,12 +27,13 @@ def var_name(point):
     try:
         # Will work if variable is a BAC0 point
         prop = point.properties
-        name = '%s (%s)' % (prop.name, prop.description)
+        name = "%s (%s)" % (prop.name, prop.description)
     except AttributeError:
         name = "(name not found)"
     return name
-   
-def wait_for_state(point, state, *, callback = None, timeout=180):
+
+
+def wait_for_state(point, state, *, callback=None, timeout=180):
     """
     This function will read a point and wait for its state to match the 
     state parameter value. Common use case is to wait until a point reach 
@@ -52,19 +55,26 @@ def wait_for_state(point, state, *, callback = None, timeout=180):
     tout = time.time() + timeout
     while True:
         if point == state:
-            log.info('%s is now in state %s' % (var_name(point), state))
+            add_note(
+                point.properties.device,
+                "%s is now in state %s" % (var_name(point), state),
+            )
             break
         elif time.time() > tout:
-            #raise TimeoutError('Wrong state after waiting a long time.')
-            log.error('Timeout : %s in wrong state (%s != %s) after %s sec' % (var_name(point), format_variable_value(point), state, timeout))
+            # raise TimeoutError('Wrong state after waiting a long time.')
+            add_error(
+                point.properties.device,
+                "Timeout : %s in wrong state (%s != %s) after %s sec"
+                % (var_name(point), format_variable_value(point), state, timeout),
+            )
             break
         time.sleep(2)
     # State is now correct, execute callback
     if callback is not None:
         callback()
 
-   
-def wait_for_state_not(point, state, *, callback = None, timeout=180):
+
+def wait_for_state_not(point, state, *, callback=None, timeout=180):
     """
     This function will read a point and wait for its state to diverge from the 
     state parameter value. Common use case is to wait until a point quits 
@@ -83,17 +93,25 @@ def wait_for_state_not(point, state, *, callback = None, timeout=180):
     tout = time.time() + timeout
     while True:
         if point != state:
-            log.info('%s left state %s for %s' % (var_name(point), state, point.value))
+            add_note(
+                point.properties.device,
+                "%s left state %s for %s" % (var_name(point), state, point.value),
+            )
             break
         elif time.time() > tout:
-            log.error("Timeout : %s didn't change state (%s == %s) after %s sec" % (var_name(point), format_variable_value(point), state, timeout))
+            add_error(
+                point.properties.device,
+                "Timeout : %s didn't change state (%s == %s) after %s sec"
+                % (var_name(point), format_variable_value(point), state, timeout),
+            )
             break
         time.sleep(2)
     # State is now correct, execute callback
     if callback is not None:
-        callback()        
-        
-def wait_for_value_gt(point, value, *, callback = None, timeout=90):
+        callback()
+
+
+def wait_for_value_gt(point, value, *, callback=None, timeout=90, maximum=None):
     """
     This function will read a point and wait for its value to be greater than 
     the value parameter. 
@@ -108,21 +126,38 @@ def wait_for_value_gt(point, value, *, callback = None, timeout=90):
     :param timeout: float
     
     """
+
+    def test_max(point, maximum):
+        if maximum:
+            if point.value == maximum:
+                return True
+        else:
+            return False
+
     tout = time.time() + timeout
     while True:
-        if point.value > value:
-            log.info('%s is greater than %.2f (value = %s)' % (var_name(point), value, format_variable_value(point)))
+        if point.value > value or test_max(point, maximum):
+            add_note(
+                point.properties.device,
+                "%s is greater than %.2f (value = %s or has reached maximum value)"
+                % (var_name(point), value, format_variable_value(point)),
+            )
             break
         elif time.time() > tout:
-            #raise TimeoutError('Variable not yet greater than value after timeout')
-            log.error('Timeout : %s (value = %s) not greater than %.2f after %s sec' % (var_name(point), format_variable_value(point), value, timeout))
+            # raise TimeoutError('Variable not yet greater than value after timeout')
+            add_error(
+                point.properties.device,
+                "Timeout : %s (value = %s) not greater than %.2f after %s sec"
+                % (var_name(point), format_variable_value(point), value, timeout),
+            )
             break
         time.sleep(2)
     # State is now correct, execute callback
     if callback is not None:
-        callback()        
+        callback()
 
-def wait_for_value_lt(point, value, *, callback = None, timeout=90):
+
+def wait_for_value_lt(point, value, *, callback=None, timeout=90, minimum=None):
     """
     This function will read a point and wait for its value to be less than 
     the value parameter. 
@@ -137,21 +172,38 @@ def wait_for_value_lt(point, value, *, callback = None, timeout=90):
     :param timeout: float
     
     """
+
+    def test_min(point, minimum):
+        if minimum:
+            if point.value == minimum:
+                return True
+        else:
+            return False
+
     tout = time.time() + timeout
     while True:
-        if point.value < value:
-            return ('%s is less than %.2f (value = %s)' % (var_name(point), value, point))
+        if point.value < value or test_min(point, minimum):
+            add_note(
+                point.properties.device,
+                "%s is less than %.2f (value = %s or has reached minimum value)"
+                % (var_name(point), value, point),
+            )
             break
         elif time.time() > tout:
-            #raise TimeoutError('Variable not yet less than value after timeout')
-            log.error('Timeout : %s (value = %s) not less than %.2f after %s sec' % (var_name(point), format_variable_value(point), value, timeout))
+            # raise TimeoutError('Variable not yet less than value after timeout')
+            add_error(
+                point.properties.device,
+                "Timeout : %s (value = %s) not less than %.2f after %s sec"
+                % (var_name(point), format_variable_value(point), value, timeout),
+            )
             break
         time.sleep(2)
     # State is now correct, execute callback
     if callback is not None:
         callback()
-        
-def check_that(point, value, *, callback = None, timeout=90):
+
+
+def check_that(point, value, *, callback=None, timeout=90):
     """
     This function will read a point and check if its value fits the value
     parameter.
@@ -169,136 +221,58 @@ def check_that(point, value, *, callback = None, timeout=90):
     tout = time.time() + timeout
     while True:
         if point == value:
-            log.info('%s is %s' % (var_name(point), value))
+            add_note(point.properties.device, "%s is %s" % (var_name(point), value))
             break
         elif time.time() > tout:
-            log.error('Problem : %s is not %s, it is %s after %s sec' % (var_name(point), value, format_variable_value(point), timeout))
+            add_error(
+                point.properties.device,
+                "Problem : %s is not %s, it is %s after %s sec"
+                % (var_name(point), value, format_variable_value(point), timeout),
+            )
             break
         time.sleep(2)
     # State is now correct, execute callback
     if callback is not None:
         callback()
 
-def check_pid(pv, setpoint, output, *, offset = 3, direct_acting = True, name = 'unknown', callback = None, timeout=180):
+
+def check_isclose(point, value, *, rtol=1e-02, atol=1e-02, callback=None, timeout=90):
     """
-    This function will validate if a PID loop is acting correctly.
+    This function will read a point and check if its value is closed to the value
+    parameter.
     
-    How
-    ==========
-    Direct Acting
-    ---------------
-    If the PID is said to be direct acting (direct_acting = True, default), it 
-    is a PID with an output that will rise if the process value (PV) rise 
-    compared to the setpoint. It's a "cooling PID".
-    
-    The function will adjust the process value (simulation of the input) to be
-    greater than the setpoint (adding the offset parameter to the setpoint).
-    
-    Function will then wait for a rise in the output. See function : 
-        detect_rise_in_output
-        
-    Once it's done, the function will revert the action by adjusting the process
-    value to be less than the setpoint (substracting the offset parameter to 
-    the setpoint).
-    
-    Function will then wait for a drop in the output. See function : 
-        detect_drop_in_output
-
-    Reverse Acting
-    ---------------    
-    If the PID is said to be reverse acting (direct_acting = False), it is a 
-    PID with an output that will rise if the process value (PV) drops compared 
-    to the setpoint. It's a "heating PID".
-
-    The function will adjust the process value (simulation of the input) to be
-    less than the setpoint (substracting the offset parameter to the setpoint).
-    
-    Function will then wait for a rise in the output. See function : 
-        detect_rise_in_output
-
-    Once it's done, the function will revert the action by adjusting the process
-    value to be greater than the setpoint (adding the offset parameter to 
-    the setpoint).
-    
-    Function will then wait for a drop in the output. See function : 
-        detect_drop_in_output    
-    
-    Timeout
-    -------
     A timeout will trig an error if the function is waiting for too long.
     
-    Log
-    ---
     Output will be log as an info when success or an error in case of a timeout
     
-    :param pv: BAC0.point (The process value)
-    :param setpoint: BAC0.point (The setpoint)
-    :param output: BAC0.point (The output driven by the PID Loop)
-    :param offset: float (offset of the pv compared to the setpoint to force an action)
-    :param direct_acting: boolean (Action of the PID)
-    :param name: str (Name of the PID for logging)
+    :param point: BAC0.point
+    :param value: float or string
     :param callback: function (optional)
     :param timeout: float
     
     """
-    res = 0
-    log.info('*******************************\n \
-              | Testing PID %s               \n \
-              *******************************' % name)
-    try:
-        initial_pv_value = pv.value
-        initial_out_value = out.value
-    except AttributeError:
-        raise AttributeError('You must provide PV and Output as a BAC0 point variable')
-    log.info('Waiting one minute to gather data')
 
-    if direct_acting:
-        # Output should rise if PV is greater than setpoint (cooling)
-        log.info('Setting process value (%s) higher than setpoint (%s)' % (var_name(pv), setpoint.value) )
-        pv._set(setpoint + 3)
-        result = detect_rise_in_output(output, timeout=30)
-        if result : 
-            log.info('PID (%s) is working correctly, there has been a rise in the value' % name)
-            res += 1
-        else:
-            log.error('PID (%s) is not working' % name)
-        log.info('Setting process value (%s) lower than setpoint (%s)' % (var_name(pv), setpoint.value) )
-        pv._set(setpoint - 3)
-        result = detect_drop_in_output(output, timeout=30)
-        if result : 
-            log.info('PID (%s) is working correctly, there has been a drop in the value' % name) 
-            res += 1
-        else:
-            log.error('PID (%s) is not working' % name)
-
-    else:
-        # Output should rise if PV is less than setpoint (heating)
-        log.info('Setting process value (%s) lower than setpoint (%s)' % (var_name(pv), setpoint.value) )
-        pv._set(setpoint - 3)
-        result = detect_rise_in_output(output, timeout=30)
-        if result : 
-            log.info('PID (%s) is working correctly, there has been a rise in the value' % name)
-        else:
-            log.error('PID (%s) is not working' % name)
-        log.info('Setting process value (%s) higher than setpoint (%s)' % (var_name(pv), setpoint.value) )
-        pv._set(setpoint + 3)
-        result = detect_drop_in_output(output, timeout=30)
-        if result : 
-            log.info('PID (%s) is working correctly, there has been a drop in the value' % name)            
-        else:
-            log.error('PID (%s) is not working' % name)                    
-    pv._set(initial_pv_value)
-    if res == 2:
-        log.info('PID tests worked correctly')
-    elif res == 1:
-        log.error('At least one test failed')
-    else:
-        log.error('PID tests faileds')
+    tout = time.time() + timeout
+    while True:
+        if np.isclose(point.value, value, rtol=rtol, atol=atol):
+            add_note(
+                point.properties.device, "%s is close to %s" % (var_name(point), value)
+            )
+            break
+        elif time.time() > tout:
+            add_error(
+                point.properties.device,
+                "Problem : %s is not close to %s, it is %s after %s sec"
+                % (var_name(point), value, format_variable_value(point), timeout),
+            )
+            break
+        time.sleep(2)
     # State is now correct, execute callback
     if callback is not None:
-        callback()                        
+        callback()
 
-def detect_rise_in_output(output, timeout = 30):
+
+def detect_rise_in_output(output, timeout=300, minimum=None, maximum=None):
     """
     This function will monitor an output and check if there is a growing
     trend. If the output gets higher with time.
@@ -307,24 +281,34 @@ def detect_rise_in_output(output, timeout = 30):
     we will consider that the output is rising (success).
     
     :param output: BAC0.point
+    :param minimum: float lowest possible value
+    :param maximum: float highest possible value
     :param timeout: float timeout duration in seconds
     """
     timeout_each_test = (timeout - 3) / 3
     initial_out_value = output.value
-    wait_for_value_gt(output, initial_out_value, timeout=timeout_each_test)
-    time.sleep(1)
+    wait_for_value_gt(
+        output, initial_out_value, timeout=timeout_each_test, maximum=maximum
+    )
+    time.sleep(20)
     second_out_value = output.value
-    wait_for_value_gt(output, second_out_value, timeout=timeout_each_test)
-    time.sleep(1)
+    wait_for_value_gt(
+        output, second_out_value, timeout=timeout_each_test, maximum=maximum
+    )
+    time.sleep(20)
     third_out_value = output.value
-    wait_for_value_gt(output, initial_out_value, timeout=timeout_each_test)
-    if (third_out_value > second_out_value and second_out_value > initial_out_value) \
-       or (third_out_value > initial_out_value):
+    wait_for_value_gt(
+        output, third_out_value, timeout=timeout_each_test, maximum=maximum
+    )
+    if (
+        third_out_value > second_out_value and second_out_value > initial_out_value
+    ) or (third_out_value > initial_out_value):
         return True
     else:
         return False
 
-def detect_drop_in_output(output, timeout = 30):
+
+def detect_drop_in_output(output, timeout=300, minimum=None, maximum=None):
     """
     This function will monitor an output and check if there is a droping
     trend. If the output gets lower with time.
@@ -333,22 +317,32 @@ def detect_drop_in_output(output, timeout = 30):
     we will consider that the output is droping (success).
     
     :param output: BAC0.point
+    :param minimum: float lowest possible value
+    :param maximum: float highest possible value
     :param timeout: float timeout duration in seconds
     """
     timeout_each_test = (timeout - 3) / 3
     initial_out_value = output.value
-    wait_for_value_lt(output, initial_out_value, timeout=timeout_each_test)
-    time.sleep(1)
+    wait_for_value_lt(
+        output, initial_out_value, timeout=timeout_each_test, minimum=minimum
+    )
+    time.sleep(20)
     second_out_value = output.value
-    wait_for_value_lt(output, second_out_value, timeout=timeout_each_test)
-    time.sleep(1)
+    wait_for_value_lt(
+        output, second_out_value, timeout=timeout_each_test, minimum=minimum
+    )
+    time.sleep(20)
     third_out_value = output.value
-    wait_for_value_lt(output, initial_out_value, timeout=timeout_each_test)
-    if (third_out_value < second_out_value and second_out_value < initial_out_value) \
-       or (third_out_value < initial_out_value):
+    wait_for_value_lt(
+        output, third_out_value, timeout=timeout_each_test, minimum=minimum
+    )
+    if (
+        third_out_value < second_out_value and second_out_value < initial_out_value
+    ) or (third_out_value < initial_out_value):
         return True
     else:
         return False
+
 
 def format_variable_value(point):
     """
@@ -357,15 +351,16 @@ def format_variable_value(point):
     try:
         var_prop = point.properties
         var_type = var_prop.type
-        if 'multiState' in var_type:
+        if "multiState" in var_type:
             return point.enumValue
-        elif 'binary' in var_type:
+        elif "binary" in var_type:
             return point.boolValue
-        elif 'analog' in var_type:            
-            return '%.2f %s' % (point.value, var_prop.units_state)    
+        elif "analog" in var_type:
+            return "%.2f %s" % (point.value, var_prop.units_state)
     except AttributeError:
         return point
-    
+
+
 def adjust(point, value):
     """
     This function will write to a BAC0.point and log the action to the file.
@@ -377,9 +372,18 @@ def adjust(point, value):
     """
     try:
         point._set(value)
-        log.info('%s has been adjusted to %s' % (var_name(point), format_variable_value(point)))
+        add_note(
+            point.properties.device,
+            "%s has been adjusted to %s"
+            % (var_name(point), format_variable_value(point)),
+        )
     except:
-        log.error('%s has not been adjusted to %s and is still %s' % (var_name(point), value, format_variable_value(point)))
+        add_error(
+            point.properties.device,
+            "%s has not been adjusted to %s and is still %s"
+            % (var_name(point), value, format_variable_value(point)),
+        )
+
 
 def which_pump(pump_1, pump_2):
     if pump_1:
@@ -390,7 +394,8 @@ def which_pump(pump_1, pump_2):
         active_pump = 0
     return active_pump
 
-def check_pump_rotation(rotation_point, pump_1, pump_2, *, name=''):
+
+def check_pump_rotation(rotation_point, pump_1, pump_2, *, name=""):
     """
     Pump rotation test
     
@@ -401,17 +406,24 @@ def check_pump_rotation(rotation_point, pump_1, pump_2, *, name=''):
     
     """
     pump_before = which_pump(pump_1, pump_2)
-    log.info('Forcing pump rotation')
+    add_note(rotation_point.properties.device, "Forcing pump rotation")
     adjust(rotation_point, True)
     adjust(rotation_point, False)
     pump_after = which_pump(pump_1, pump_2)
-    log.info('Before rotation : %s Pump %s' % (name, pump_before))
-    log.info('After rotation : %s Pump %s' % (name, pump_after))
+    add_note(
+        rotation_point.properties.device,
+        "Before rotation : %s Pump %s" % (name, pump_before),
+    )
+    add_note(
+        rotation_point.properties.device,
+        "After rotation : %s Pump %s" % (name, pump_after),
+    )
     if pump_after != pump_before:
-        log.info('Rotation succeeded')
+        add_note(rotation_point.properties.device, "Rotation succeeded")
     else:
-        log.error('Rotation failed')
-    
+        add_error(rotation_point.properties.device, "Rotation failed")
+
+
 def enum_history(point):
     """
     BAC0 history for enum are by default integer values. It is often more 
@@ -423,30 +435,51 @@ def enum_history(point):
     :param point: BAC0.point
     :returns: pandas.DataFrame with a 'enum' column.
     """
+
     def fn(value):
         return states[value]
+
     try:
         states = point.properties.units_state
-        df = pd.DataFrame({'value':point.history})
-        df['enum'] = df['value'].apply(fn)
-        return df['enum']
+        df = pd.DataFrame({"value": point.history})
+        df["enum"] = df["value"].apply(fn)
+        return df["enum"]
 
     except AttributeError:
-        raise AttributeError('Must provide a BAC0.point history')
-            
-    
-class diff_press():
+        raise AttributeError("Must provide a BAC0.point history")
+
+
+class diff_press:
     """
     Custom class that mimic a BAC0.point to modify 2 pressure inputs so the diff pressure is what we want.
     """
-    def __init__(self, succion_press = None, disch_press = None, device_result = None):
+
+    def __init__(self, succion_press=None, disch_press=None, device_result=None):
         self.rp = succion_press
         self.dp = disch_press
         self.result = device_result
+
     def _set(self, value):
         adjust(self.dp, self.rp.value + value)
-        log.info('Differential pressure is now %.2f psi' % self.result)
-        
+        add_note(
+            self.rp.properties.device,
+            "Differential pressure is now %.2f psi" % self.value,
+        )
+
     @property
     def value(self):
         return self.result.value
+
+    @property
+    def properties(self):
+        return self.succion_press.properties
+
+
+def add_note(controller, note):
+    log.info(note)
+    controller.notes = note
+
+
+def add_error(controller, note):
+    log.error(note)
+    controller.notes = note

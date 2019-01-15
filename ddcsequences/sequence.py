@@ -14,23 +14,26 @@ from . import ddclog
 
 import logging
 
+
 class Sequence(object):
     """
     This object stores all the tasks needed to simulate and test the sequence.
     It also contains everything to create the log file that will hold every 
     actions, task and comment made during the tests.
     """
-    def __init__(self, name = None):
+
+    def __init__(self, name=None):
         if name:
             self._create_logger(name)
         else:
-            raise NameError('You must give a name to the sequence of operation')
-        
+            raise NameError("You must give a name to the sequence of operation")
+
         self.start()
-        
+
     def _create_logger(self, name):
-        self.log = ddclog.createLogger('sequence', filename = name)
-        self.log.info('\n \
+        self.log = ddclog.createLogger("sequence", filename=name)
+        self.log.info(
+            '\n \
                        =====================================================\n \
                        =               MESSAGE TO READER                   =\n \
                        =====================================================\n \
@@ -40,21 +43,25 @@ class Sequence(object):
                       will add something to this log.\n \
                       By default, "- INFO -" means the test is succesful.\n \
                       "- ERROR -" will indicate problems in the test and inform you of the trouble\n \
-                      In the Notebook, only ERROR will show.\n')
+                      In the Notebook, only ERROR will show.\n'
+        )
         fh = self.log.handlers[0]
         fn = fh.baseFilename
-        self.log.info('A file with all logs can be found here : %s\n' % fn)
-    
-    def add_task(self, task, *, name = 'unknown'):
+        self.log.info("A file with all logs can be found here : %s\n" % fn)
+
+    def add_task(self, task, *, name="unknown", callback=None):
         try:
             self.tasks_processor.add_task(task, name)
+            if callback:
+                self.log.debug("Executing callback")
+                self.tasks_processor.add_task(callback, "callback")
         except AttributeError:
-            self.log.critical('sequence not running, use start()')
-    
-    @property    
+            self.log.critical("sequence not running, use start()")
+
+    @property
     def tasks(self):
         return self.tasks_processor._tasks
-        
+
     def start(self):
         try:
             self.tasks_processor.start()
@@ -65,8 +72,8 @@ class Sequence(object):
     def stop(self):
         self.tasks_processor.stop()
         del self.tasks_processor
-        
-    @property 
+
+    @property
     def progress(self):
         task_list, processing = self.tasks_processor.tasks_to_process()
         if processing[0]:
@@ -77,7 +84,7 @@ class Sequence(object):
         else:
             return "Nothing to process"
 
-            
+
 class Tasks_Processor(Thread):
     """
     Task processor is a thread that will execute tasks one after another.
@@ -85,25 +92,25 @@ class Tasks_Processor(Thread):
     """
 
     # Init thread running server
-    def __init__(self,*, daemon = True):
-        Thread.__init__(self, daemon = daemon)
+    def __init__(self, *, daemon=True):
+        Thread.__init__(self, daemon=daemon)
         self._tasks = queue.Queue()
         self.exitFlag = False
-        self.log = logging.getLogger('sequence')
+        self.log = logging.getLogger("sequence")
         self.processing = [False, ""]
-        
-    def add_task(self, task, name = 'unknown'):
-        self.log.debug('Added task : %s' % name)
+
+    def add_task(self, task, name="unknown"):
+        self.log.debug("Added task : %s" % name)
         self._tasks.put((task, name))
-        
+
     def tasks_to_process(self):
         tasks_list = []
         for each in self._tasks.queue:
             tasks_list.append(each[1])
         return (tasks_list, self.processing)
-        
+
     def run(self):
-        self.log.debug('Starting task processor')
+        self.log.debug("Starting task processor")
         self.process()
 
     def process(self):
@@ -111,24 +118,28 @@ class Tasks_Processor(Thread):
         Main loop executing tasks.
         """
         while not self.exitFlag:
-        #    self.task()
+            #    self.task()
             while self._tasks:
                 task, name = self._tasks.get()
-                log = logging.getLogger('sequence.%s' % name)
+                log = logging.getLogger("sequence.%s" % name)
                 print(log.name)
-                self.processing = [True, name]  
-                self.log.info('\n \
+                self.processing = [True, name]
+                self.log.info(
+                    "\n \
                                ==========================================\n \
                                = Running : %s\n \
-                               ==========================================' % name)
+                               =========================================="
+                    % name
+                )
                 task()
                 self._tasks.task_done()
-                log = logging.getLogger('sequence')
-                
+                self.processing = [False, ""]
+                log = logging.getLogger("sequence")
+
             self.processing = [False, ""]
 
     def stop(self):
-        self.log.debug('Stopping task processor')
+        self.log.debug("Stopping task processor")
         self.exitFlag = True
 
     def beforeStop(self):
