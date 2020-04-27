@@ -8,9 +8,9 @@
 Informations MetaData
 """
 
-__author__ = 'Christian Tremblay, P.Eng.'
-__email__ = 'christian.tremblay@servisys.com'
-__url__ = ''
-__download_url__ = ''
-__version__ = '0.2.1'
-__license__ = 'GPLv3'
+__author__ = "Christian Tremblay, P.Eng."
+__email__ = "christian.tremblay@servisys.com"
+__url__ = ""
+__download_url__ = ""
+__version__ = "20.04.24"
+__license__ = "GPLv3"

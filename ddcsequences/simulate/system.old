@@ -1,0 +1,254 @@
+#!/usr/bin/python
+# -*- coding: utf-8 -*-
+#
+# Copyright (C) 2020 by Christian Tremblay, P.Eng <christian.tremblay@servisys.com>
+#
+# Licensed under LGPLv3, see file LICENSE in this source tree.
+from random import random
+from enum import Enum
+import BAC0
+
+
+class Clamp(Enum):
+    NONE = 0
+    MIN = 1
+    MAX = 2
+    BOTH = 3
+
+
+class System:
+
+    types = {
+        "none": ["decrease", "increase"],
+        "temperature": ["cool", "heat"],
+        "humidity": ["dehumidify", "humidify"],
+        "pressure": ["depressurize", "pressurize"],
+    }
+
+    """
+    A system serves as a black box taking an input, applying
+    an effect, generating an output. This process will be
+    repeated to create a good simulation.
+
+    input_point : can be a numeric value or a BAC0.point
+    output_point : BAC0.point provided as a way to get
+    historical data and create a smoother output based on
+    last values.
+    command : BAC0.point 
+    delta : the total effect of the command
+    (for example, delta T of 30degC for a heater @ 100%)
+
+    Each system will contain functions meant to be run as
+    lambda function using match_value on a point. 
+    
+    Return value should be the new value of the output
+    """
+
+    def __init__(
+        self,
+        system_input,
+        process,
+        system_output,
+        *,
+        name="HeatingValve",
+        delta=15,
+        increase_output=True,
+        system_type="none",
+    ):
+
+        self.name = name
+        self.delta = delta
+        self.input = system_input
+        self.process = process
+        self.output_point = output_point
+        # self.increase_output = increase_output
+        # self.system_type = system_type
+        self.meta = {}
+        self.clamp = Clamp.NONE
+
+    # @property
+    # def action(self):
+    #    return System.types[self.system_type][self.increase_output]
+
+    #    def apply_effect(self):
+    #        raise NotImplementedError()
+
+    @property
+    def execute(self):
+        """
+        Easy way to get the function itself to be used in lambda for BAC0 match_value
+        Which includes a protection so output will be kept inside theorical limits
+        input +- delta
+        if system increase the output, will max to input + delta
+        if decrease the output, will "max" to input - delta
+        """
+        if self.increase_output:
+            return System._clamp(self.apply_effect(), max_value=self.theorical_max)
+        else:
+            return System._clamp(self.apply_effect(), min_value=self.theorical_min)
+
+    def __repr__(self):
+        if isinstance(self, MixInputs):
+            return "Mixer"
+        else:
+            return "{} | will {} output {} applying a delta of {} {}".format(
+                self.name,
+                self.action,
+                self.output_point.properties.name,
+                self.delta,
+                self.output_point.properties.units_state,
+            )
+
+    def _clamp(self, value):
+        value = value
+        if self.mode == Clamp.NONE:
+            return value
+        if self.mode == Clamp.MIN or self.mode == Clamp.BOTH:
+            if value < self.theorical_min:
+                if self.mode == Clamp.BOTH:
+                    value = self.theorical_min
+                else:
+                    return value
+        if self.mode == Clamp.MAX or self.mode == Clamp.BOTH:
+            if value > self.theorical_max:
+                value = self.theorical_max
+
+        return value
+
+    @property
+    def theorical_min(self):
+        if callable(self.input_point):
+            return self.input_point() - self.delta
+        return self.input_point - self.delta
+
+    @property
+    def theorical_max(self):
+        if callable(self.input_point):
+            return self.input_point() + self.delta
+        return self.input_point + self.delta
+
+
+class Modulated:
+    """
+    System that will increase or decrease an output linearly
+    """
+
+    def apply_effect(self):
+        """
+        This function will simulate the effect of a
+        device command, based on a reference input (before effect)
+        on a sensor (output)
+
+        Typical use : heating coil effect on discharge air
+        Effect is calculated based on a mixed air temp
+        that can be calculated too, based for example on 
+        a return air temperature and a certain amount of
+        fresh air.
+        Randomness is added as a way to make things more "natural"
+        """
+        delta_t = self.delta
+        command = (self.command.lastValue + random()) / 100
+
+        if callable(self.input_point):
+            input_value = self.input_point()
+        else:
+            try:
+                input_value = self.input_point.lastValue
+            except:
+                input_value = self.input_point
+
+        try:
+            base = (self.output_point.history.tail(10).mean() + input_value) / 2
+        except:
+            base = input_value
+
+        if self.increase_output:
+            return base + (command * delta_t)
+
+        else:
+            return base - (command * delta_t)
+
+
+class OnOff:
+    """
+    Similar to modulated system, but the output can only be on or off.
+    Multiple commands can be provided (as a list) (ex. cooling stages)
+
+    delta must be the total effect of all stages.
+    ex. 7degC per DX Cooling stages, 3 stages = 21degC
+    """
+
+    def apply_effect(self):
+        """
+        This function will simulate the heating effect of an
+        output, based on a reference sensore (before heating)
+        on a sensor (after heating device)
+
+        Typical use : heating coil effect on discharge air
+        Effect is calculated based on a mixed air temp
+        that can be calculated too, based for example on 
+        a return air temperature and a certain amount of
+        fresh air.
+        Randomness is added as a way to make things more "natural"
+        """
+
+        delta_t = self.delta
+        if isinstance(self.command, list):
+            number_of_stages = len(self.command)
+            effective = 0
+            for each in self.command:
+                if each.lastValue:
+                    effective += 1
+        else:
+            raise TypeError("Output must be defined as a list")
+
+        command = effective / number_of_stages
+
+        if callable(self.input_point):
+            input_value = self.input_point()
+        else:
+            try:
+                input_value = self.input_point.lastValue
+            except:
+                input_value = self.input_point
+
+        try:
+            base = (self.output_point.history.tail(10).mean() + input_value) / 2
+        except:
+            base = input_value
+
+        if increase:
+            return base + (command * delta_t)
+        else:
+            return base - (command * delta_t)
+
+
+class MixInputs:
+    """
+    To create artificial loads for water loops or tanks. 
+    Takes a list of inputs and output the average
+    The input list should include weight for each input
+
+    [(input1), (input2)]
+
+    command is not used in this configuration
+    delta is not used
+    """
+
+    def apply_effect(self):
+        """
+
+        Randomness is added as a way to make things more "natural"
+        """
+        delta_t = self.delta
+        if isinstance(self.input_point, list):
+            number_of_inputs = len(self.input_point)
+            value = 0
+            for each in self.input_point:
+                value += each.lastValue
+        else:
+            raise TypeError("Inputs must be defined as a list")
+
+        mean = value / number_of_inputs
+
+        return mean

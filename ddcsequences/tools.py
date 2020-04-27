@@ -377,11 +377,11 @@ def adjust(point, value):
             "%s has been adjusted to %s"
             % (var_name(point), format_variable_value(point)),
         )
-    except:
+    except Exception as e:
         add_error(
             point.properties.device,
-            "%s has not been adjusted to %s and is still %s"
-            % (var_name(point), value, format_variable_value(point)),
+            "%s has not been adjusted to %s and is still %s (%s)"
+            % (var_name(point), value, format_variable_value(point), e),
         )
 
 
@@ -476,10 +476,12 @@ class diff_press:
 
 
 def add_note(controller, note):
-    log.info(note)
-    controller.notes = note
+    # log.info(note)
+    print(note)
+    controller.note(note)
 
 
 def add_error(controller, note):
-    log.error(note)
-    controller.notes = note
+    # log.error(note)
+    print(note)
+    controller.note(note)

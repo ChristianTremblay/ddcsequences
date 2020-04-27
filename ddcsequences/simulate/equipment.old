@@ -1,0 +1,184 @@
+#!/usr/bin/python
+# -*- coding: utf-8 -*-
+#
+# Copyright (C) 2020 by Christian Tremblay, P.Eng <christian.tremblay@servisys.com>
+#
+# Licensed under LGPLv3, see file LICENSE in this source tree.
+
+from random import random
+import time
+import BAC0
+
+from .system import (
+    System,
+    ADD,
+    SUB,
+    HEAT,
+    ValueCommandElement,
+    MixInputElement,
+    MIX,
+    LINEAR,
+)
+
+
+class SCR(System, Modulated):
+    """
+    Common SCR device to heat  
+    """
+
+    def __init__(
+        self,
+        input_point,
+        command_point,
+        output_point,
+        *,
+        name="HeatingValve",
+        delta=15,
+        increase_output=True,
+        system_type="temperature",
+    ):
+        super().__init__(
+            input_point,
+            command_point,
+            output_point,
+            name=name,
+            delta=delta,
+            increase_output=increase_output,
+            system_type=system_type,
+        )
+
+
+class HeatingValve(System, Modulated):
+    """
+    Common heating valve device  
+    """
+
+    def __init__(
+        self,
+        input_point,
+        command_point,
+        output_point,
+        *,
+        name="HeatingValve",
+        delta=25,
+        increase_output=True,
+        system_type="temperature",
+    ):
+        super().__init__(
+            input_point,
+            command_point,
+            output_point,
+            name=name,
+            delta=delta,
+            increase_output=increase_output,
+            system_type=system_type,
+        )
+
+
+class CoolingStages(System, OnOff):
+    """
+    On Off Cooling Stages. 
+    command must be a list of stages (ex. [dev['CLG1-C'],dev['CLG2-C'],dev['CLG3-C']])  
+    """
+
+    def __init__(
+        self,
+        input_point,
+        command_point,
+        output_point,
+        *,
+        name="CoolingStages",
+        delta=20,
+        increase_output=False,
+        system_type="temperature",
+    ):
+        super().__init__(
+            input_point,
+            command_point,
+            output_point,
+            name=name,
+            delta=delta,
+            increase_output=increase_output,
+            system_type=system_type,
+        )
+
+
+class CoolingValve(System, Modulated):
+    """
+    Common cooling valve device  
+    """
+
+    def __init__(
+        self,
+        input_point,
+        command_point,
+        output_point,
+        *,
+        name="CoolingValve",
+        delta=12,
+        increase_output=False,
+        system_type="temperature",
+    ):
+        super().__init__(
+            input_point,
+            command_point,
+            output_point,
+            name=name,
+            delta=delta,
+            increase_output=increase_output,
+            system_type=system_type,
+        )
+
+
+class SupplyFanVFD(System, Modulated):
+    """
+    Supply fan VFD will increase discahrge air pressure
+    """
+
+    def __init__(
+        self,
+        input_point,
+        command_point,
+        output_point,
+        *,
+        name="SupplyFanVFD",
+        delta=250,
+        increase_output=True,
+        system_type="pressure",
+    ):
+        super().__init__(
+            input_point,
+            command_point,
+            output_point,
+            name=name,
+            delta=delta,
+            increase_output=increase_output,
+            system_type=system_type,
+        )
+
+
+class ProcessWater(System, MixInputs):
+    """
+    Supply fan VFD will increase discahrge air pressure
+    """
+
+    def __init__(
+        self,
+        input_point,
+        command_point,
+        output_point,
+        *,
+        name="ProcessWater",
+        delta=250,
+        increase_output=True,
+        system_type="temperature",
+    ):
+        super().__init__(
+            input_point,
+            command_point,
+            output_point,
+            name=name,
+            delta=delta,
+            increase_output=increase_output,
+            system_type=system_type,
+        )
