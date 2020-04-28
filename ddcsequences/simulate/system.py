@@ -5,10 +5,12 @@
 #
 # Licensed under LGPLv3, see file LICENSE in this source tree.
 
-from collections import namedtuple
+from collections import namedtuple, deque
 import time
 from datetime import datetime as dt
 from random import uniform
+import numpy as np
+import math
 
 from ddcmath.heating import heating_deltaT_c
 from ddcmath.airflow import cfm2ls, ls2cfm
@@ -16,6 +18,73 @@ from ddcmath.airflow import cfm2ls, ls2cfm
 from BAC0.core.devices.Points import Point
 
 _ELEMENTS = namedtuple("INPUT_ELEMENTS", ["min", "max"])
+
+
+class Dampening(object):
+    """
+    In the context of simulation, I want to break the linearity
+    This will apply a exponential decay factor based on time so
+    maximum power will be available after 3*tau (typically 3*10sec = 30sec)
+    """
+
+    def __init__(self, tau=10):
+        self.factor = 1
+        self.tau = tau
+        self.tmax = 10 * self.tau
+        self.t = None
+        self.y = None
+        self.t0 = None
+        self.running = False
+        self.rising = False
+        self.dropping = False
+
+    def calculate(self, t0, rise=True):
+        self.t0 = t0
+        self.t = np.linspace(0, self.tmax, 1000)
+        if rise:
+            self.y = self.factor - (self.factor * np.exp(-self.t / self.tau))
+        else:
+            self.y = -self.factor * np.exp(-self.t / self.tau)
+
+    @property
+    def value(self):
+        result = -1
+        _now = dt.now()
+        self._dt = (_now - self.t0).seconds
+        for i, each in enumerate(self.t):
+            if self._dt <= each:
+                result = self.y[i]
+                break
+        if result > 0.99 or result == -1:
+            result = 1
+            self.running = False
+            self.rising = False
+            self.dropping = False
+        return result
+
+    def rise(self, t0=None):
+        if not t0:
+            t0 = dt.now()
+        self.running = True
+        self.rising = True
+        self.dropping = False
+        self.calculate(t0=t0)
+        return self.value
+
+    def drop(self, t0=None):
+        if not t0:
+            t0 = dt.now()
+        self.running = True
+        self.dropping = True
+        self.rising = False
+        self.calculate(t0=t0)
+        return self.value
+
+    def __repr__(self):
+        s = "\n{}\nDampening\n{}\n".format("=" * 20, "=" * 20)
+        for each in self.__dict__:
+            s += "    {} : {}\n".format(each, getattr(self, each))
+        return s
 
 
 class InputElement(object):
@@ -215,7 +284,7 @@ class System(object):
         out = self.process()
         self.last_execution = dt.now()
         if self.randomness:
-            out += uniform(-self.random_error, random_error)
+            out += uniform(-self.random_error, self.random_error)
         self.last_value = out
         return out
 
@@ -223,6 +292,10 @@ class System(object):
     def output(self):
         return self._pre_process()
         # return self.process()
+
+    def execution(self):
+        # To be used with BAC0 .match_value and get a Callable
+        return self.output
 
     def process(self):
         raise NotImplementedError("Must define a funtion")
@@ -498,6 +571,100 @@ class COOL(System):
         sensor, command = self.input
         delta = (command / 100) * self.delta_max
         output = sensor - delta
+        if self.min_output:
+            return max(output, self.min_output)
+        else:
+            return output
+
+
+class COOL2(System):
+    """
+    System that will cool an input
+    min_output serves in some cases like cooling valves where output 
+    temperature could not go lower than chilled water temperature.
+    """
+
+    INPUT_ELEMENTS = _ELEMENTS(min=1, max=1)
+    INPUT_ELEMENT_FORMAT = ValueCommandElement
+    CONFIG_PARAMS = ["delta_max", "min_output", "last_command", "last_offset"]
+
+    def __init__(
+        self,
+        system_input,
+        system_output=None,
+        name=None,
+        delta_max=0,
+        min_output=None,
+        tau=10,
+    ):
+        super().__init__(system_input, system_output, name=name)
+        self.delta_max = delta_max
+        self.min_output = min_output
+        self.last_command = 0
+        # self.last_delta = 0
+        self.last_offset = 0
+        # self.t_0_offset = 0
+        # self.dampening = Dampening(tau=tau)
+        self.tau = tau
+        self._changes = []
+
+    def process(self):
+        sensor, command = self.input
+        # if not self.dampening.t0: #needs to be initiliazed now
+        #    print('Init')
+        #    self.dampening.calculate(t0=self.t_0)
+        #    offset = 0
+        #    delta = 0
+
+        def calculcate_dT():
+            _transient_over_list = []
+            dT = 0
+            transient_over = True
+            # print('Changes\n[')
+            for delta_T, dampening in self._changes:
+                if isinstance(dampening, Dampening):
+                    damp_value = dampening.value
+                else:
+                    damp_value = 1
+                # print('({},{}),'.format(delta_T,damp_value))
+                dT += delta_T * damp_value
+                if damp_value < 1:
+                    transient_over = False
+
+            # print(']')
+            return (dT, transient_over)
+
+        if not math.isclose(command, self.last_command, rel_tol=0.1):
+            # command changed
+            delta_command = command - self.last_command
+            # print('Delta Command : {}'.format(delta_command))
+            _dampening = Dampening(self.tau)
+            _delta_T = (delta_command / 100) * self.delta_max
+            if delta_command < 0:  # We are cooling
+                _dampening.drop()
+                # _delta_T = -1 * _delta_T
+            else:
+                _dampening.rise()
+            self._changes.append([_delta_T, _dampening])
+
+            dT, can_clean = calculcate_dT()
+            self.last_command = command
+
+        else:
+            # Nothing change, clean and continue
+            old_dT, can_clean = calculcate_dT()
+            if can_clean:
+                _delta_T = (command / 100) * self.delta_max
+                self._changes = [(_delta_T, 1)]
+                new_dT, can_clean = calculcate_dT()
+                # print('old_dt : {} | new_dt : {}'.format(old_dT, new_dT))
+                dT = new_dT
+            else:
+                dT = old_dT
+
+        self.last_offset = dT
+        output = sensor - dT
+
         if self.min_output:
             return max(output, self.min_output)
         else:

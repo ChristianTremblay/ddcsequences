@@ -42,3 +42,6 @@ from .system import (
 # }
 
 SCR = HEAT(ValueCommandElement(), kw=1, ls=50)
+CoolingValve = COOL(
+    ValueCommandElement(), delta_max=10, min_output=5, randomness=True, random_error=0.3
+)
