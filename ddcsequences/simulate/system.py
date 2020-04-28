@@ -104,6 +104,8 @@ class InputElement(object):
         """
         if isinstance(item, Point):
             return item.lastValue
+        elif isinstance(item, System):
+            return item.output
         else:
             return item
 
@@ -329,26 +331,41 @@ class System(object):
             )
 
             _n = []
+            # good = []
             for each in system_input:
-                if self.INPUT_ELEMENT_FORMAT:
-                    assert isinstance(each, self.INPUT_ELEMENT_FORMAT)
+                #    if isinstance(self.INPUT_ELEMENT_FORMAT, list):
+                #        for each in self.INPUT_ELEMENT_FORMAT:
+                #            #for _input in system_input:
+                #                #good.append(isinstance(_input, self.INPUT_ELEMENT_FORMAT))
+                #            good.append(isinstance(system_input, each))
+                #    else:
+                #        for each in system_input:
+                #            good.append(isinstance(system_input, self.INPUT_ELEMENT_FORMAT))
+                #    assert any(good)
+                # print(type(each))
+                # print(type(self.INPUT_ELEMENT_FORMAT))
+                # print(self.INPUT_ELEMENT_FORMAT)
+                assert isinstance(each, self.INPUT_ELEMENT_FORMAT)
                 _n.append(FlexibleInput(each))
             new_input = _n
 
         else:
             if self.INPUT_ELEMENT_FORMAT:
-                good = []
-                if isinstance(self.INPUT_ELEMENT_FORMAT, list):
-                    for each in self.INPUT_ELEMENT_FORMAT:
-                        good.append(isinstance(system_input, each))
-                else:
-                    good.append(isinstance(system_input, self.INPUT_ELEMENT_FORMAT))
-                assert any(good)
+                # good = []
+                # if isinstance(self.INPUT_ELEMENT_FORMAT, list):
+                #    for each in self.INPUT_ELEMENT_FORMAT:
+                #        good.append(isinstance(system_input, each))
+                # else:
+                #    good.append(isinstance(system_input, self.INPUT_ELEMENT_FORMAT))
+                # assert any(good)
+                # print(type(system_input))
+                # print(type(self.INPUT_ELEMENT_FORMAT))
+                # print(self.INPUT_ELEMENT_FORMAT)
+                assert isinstance(system_input, self.INPUT_ELEMENT_FORMAT)
             new_input = FlexibleInput(system_input)
         return new_input
 
     def print_config(self):
-        # params = ['kw','btu','cfm','ls']
         s = "{}\nSpecific Config\n{}\n".format("=" * 20, "=" * 20)
         for each in self.CONFIG_PARAMS:
             s += "    {} : {}\n".format(each, getattr(self, each))
@@ -366,7 +383,7 @@ class System(object):
         )
 
     def __getitem__(self, name):
-        if isinstance(self.INPUT_ELEMENT_FORMAT, list):
+        if isinstance(self.INPUT_ELEMENT_FORMAT, tuple):
             for each in self.INPUT_ELEMENT_FORMAT:
                 if name in each.items:
                     return self.input.value[name]
@@ -376,7 +393,7 @@ class System(object):
         return getattr(self, name)
 
     def __setitem__(self, name, value):
-        if isinstance(self.INPUT_ELEMENT_FORMAT, list):
+        if isinstance(self.INPUT_ELEMENT_FORMAT, tuple):
             for each in self.INPUT_ELEMENT_FORMAT:
                 if name in each.items:
                     self.input.value[name] = value
@@ -394,8 +411,8 @@ class ADD(System):
     """
 
     INPUT_ELEMENTS = _ELEMENTS(min=1, max=float("inf"))
-    INPUT_ELEMENT_FORMAT = None
-    CONFIG_PARAMS = None
+    INPUT_ELEMENT_FORMAT = (System, list, float, int)
+    CONFIG_PARAMS = []
 
     def __init__(self, system_input, system_output=None, name=None, random_error=0):
         super().__init__(
@@ -416,8 +433,8 @@ class SUB(System):
     """
 
     INPUT_ELEMENTS = _ELEMENTS(min=2, max=2)
-    INPUT_ELEMENT_FORMAT = None
-    CONFIG_PARAMS = None
+    INPUT_ELEMENT_FORMAT = (System, list, float, int)
+    CONFIG_PARAMS = []
 
     def __init__(self, system_input, system_output=None, name=None, random_error=0):
         super().__init__(
@@ -481,7 +498,7 @@ class MIX(System):
 
     INPUT_ELEMENTS = _ELEMENTS(min=2, max=2)
     INPUT_ELEMENT_FORMAT = MixInputElement
-    CONFIG_PARAMS = None
+    CONFIG_PARAMS = []
 
     def __init__(self, system_input, system_output=None, name=None, random_error=0):
         super().__init__(
@@ -545,7 +562,7 @@ class TRANSIENT(System):
     """
 
     INPUT_ELEMENTS = _ELEMENTS(min=1, max=1)
-    INPUT_ELEMENT_FORMAT = [ValueCommandElement, ValueElement]
+    INPUT_ELEMENT_FORMAT = (ValueCommandElement, ValueElement)
     CONFIG_PARAMS = [
         "delta_max",
         "min_output",
@@ -566,8 +583,8 @@ class TRANSIENT(System):
         min_output=None,
         max_output=None,
         tau=10,
-        decrease=True,
-        random_error=0.1,
+        decrease=False,
+        random_error=0,
     ):
         super().__init__(
             system_input, system_output, name=name, random_error=random_error
@@ -589,32 +606,49 @@ class TRANSIENT(System):
         else:
             return 1
 
+    def calculcate_dT(self):
+        _transient_over_list = []
+        dT = 0
+        transient_over = True
+        # print("Calculate Changes\n[")
+        for delta_T, dampening in self._changes:
+            if isinstance(dampening, Dampening):
+                damp_value = dampening.value
+            else:
+                damp_value = 1
+            # print("({},{}),".format(delta_T, damp_value))
+            dT += delta_T * damp_value
+            if damp_value < 1:
+                transient_over = False
+        # print("]")
+        return (dT, transient_over)
+
     def process_value_command_element(self):
         sensor, command = self.input
 
-        def calculcate_dT():
-            _transient_over_list = []
-            dT = 0
-            transient_over = True
-            # print('Calculate Changes\n[')
-            for delta_T, dampening in self._changes:
-                if isinstance(dampening, Dampening):
-                    damp_value = dampening.value
-                else:
-                    damp_value = 1
-                # print('({},{}),'.format(delta_T,damp_value))
-                dT += delta_T * damp_value
-                if damp_value < 1:
-                    transient_over = False
-
-            # print(']')
-            return (dT, transient_over)
+        # def calculcate_dT():
+        #    _transient_over_list = []
+        #    dT = 0
+        #    transient_over = True
+        #    # print('Calculate Changes\n[')
+        #    for delta_T, dampening in self._changes:
+        #        if isinstance(dampening, Dampening):
+        #            damp_value = dampening.value
+        #        else:
+        #            damp_value = 1
+        #        # print('({},{}),'.format(delta_T,damp_value))
+        #        dT += delta_T * damp_value
+        #        if damp_value < 1:
+        #            transient_over = False
+        #
+        #    # print(']')
+        #    return (dT, transient_over)
 
         def _clean():
             # print('CLEAN')
             _delta_T = (command / 100) * self.delta_max
             self._changes = [(_delta_T, 1)]
-            new_dT, can_clean = calculcate_dT()
+            new_dT, can_clean = self.calculcate_dT()
             # print('old_dt : {} | new_dt : {}'.format(old_dT, new_dT))
             dT = new_dT
             return dT
@@ -631,12 +665,12 @@ class TRANSIENT(System):
                 _dampening.rise()
             self._changes.append([_delta_T, _dampening])
 
-            dT, can_clean = calculcate_dT()
+            dT, can_clean = self.calculcate_dT()
             self.last_command = command
 
         else:
             # Nothing change, clean and continue
-            old_dT, can_clean = calculcate_dT()
+            old_dT, can_clean = self.calculcate_dT()
             if can_clean:
                 dT = _clean()
             else:
@@ -647,37 +681,38 @@ class TRANSIENT(System):
 
     def process_value_element(self):
         new_input = self.input.value["value"]
+        if isinstance(new_input, System):
+            new_input = new_input.output
 
-        def calculcate_dT():
-            _transient_over_list = []
-            dT = 0
-            transient_over = True
-            print("Calculate Changes\n[")
-            for delta_T, dampening in self._changes:
-                if isinstance(dampening, Dampening):
-                    damp_value = dampening.value
-                else:
-                    damp_value = 1
-                print("({},{}),".format(delta_T, damp_value))
-                dT += delta_T * damp_value
-                if damp_value < 1:
-                    transient_over = False
-
-            print("]")
-            return (dT, transient_over)
+        # def calculcate_dT():
+        #    _transient_over_list = []
+        #    dT = 0
+        #    transient_over = True
+        #    #print("Calculate Changes\n[")
+        #    for delta_T, dampening in self._changes:
+        #        if isinstance(dampening, Dampening):
+        #            damp_value = dampening.value
+        #        else:
+        #            damp_value = 1
+        #        #print("({},{}),".format(delta_T, damp_value))
+        #        dT += delta_T * damp_value
+        #        if damp_value < 1:
+        #            transient_over = False
+        #    #print("]")
+        #    return (dT, transient_over)
 
         def _clean():
-            print("CLEAN")
+            # print("CLEAN")
             # self._changes = [(new_input, 1)]
-            new_dT, can_clean = calculcate_dT()
-            print("old_dt : {} | new_dt : {}".format(old_dT, new_dT))
+            new_dT, can_clean = self.calculcate_dT()
+            # print("old_dt : {} | new_dt : {}".format(old_dT, new_dT))
             dT = new_dT
             return dT
 
         if not math.isclose(new_input, self.last_input, rel_tol=0.1):
             # command changed
             delta_input = new_input - self.last_input
-            print("Delta Command : {}".format(delta_input))
+            # print("Delta Command : {}".format(delta_input))
             _dampening = Dampening(self.tau)
             _delta_T = delta_input
             if delta_input < 0:
@@ -686,12 +721,12 @@ class TRANSIENT(System):
                 _dampening.rise()
             self._changes.append([delta_input, _dampening])
 
-            dT, can_clean = calculcate_dT()
+            dT, can_clean = self.calculcate_dT()
             self.last_input = new_input
 
         else:
             # Nothing change, clean and continue
-            old_dT, can_clean = calculcate_dT()
+            old_dT, can_clean = self.calculcate_dT()
             if can_clean:
                 dT = new_input
                 self._changes = [(new_input, 1)]
@@ -710,126 +745,6 @@ class TRANSIENT(System):
             output = self.process_value_element()
         else:
             output = float("-inf")
-
-        # self.last_offset = dT
-        # output = sensor + (self._effect() * dT)
-
-        if self.max_output:
-            output = min(output, self.max_output)
-
-        if self.min_output:
-            output = max(output, self.min_output)
-        # if output == self.max_output or output == self.min_output:
-        #    _ = _clean()
-
-        return output
-
-
-class TRANSIENT2(System):
-    """
-    System that will increase or decrease an input
-    min_output serves in some cases like cooling valves where output 
-    temperature could not go lower than chilled water temperature.
-    """
-
-    INPUT_ELEMENTS = _ELEMENTS(min=1, max=1)
-    INPUT_ELEMENT_FORMAT = ValueElement
-    CONFIG_PARAMS = [
-        "delta_max",
-        "min_output",
-        "max_output",
-        "last_command",
-        "last_offset",
-        "tau",
-        "decrease",
-    ]
-
-    def __init__(
-        self,
-        system_input,
-        system_output=None,
-        name=None,
-        delta_max=0,
-        min_output=None,
-        max_output=None,
-        tau=10,
-        decrease=True,
-        random_error=0.1,
-    ):
-        super().__init__(
-            system_input, system_output, name=name, random_error=random_error
-        )
-        self.delta_max = delta_max
-        self.min_output = min_output
-        self.max_output = max_output
-        self.last_input = 0
-        self.last_offset = 0
-        self.tau = tau
-        self._changes = []
-        self.decrease = decrease
-
-    def _effect(self):
-        # Select between increasing effect and decreasing effect
-        if self.decrease:
-            return -1
-        else:
-            return 1
-
-    def process_value_element(self):
-        new_input = self.input.value["value"]
-
-        def calculcate_dT():
-            _transient_over_list = []
-            dT = 0
-            transient_over = True
-            print("Calculate Changes\n[")
-            for delta_T, dampening in self._changes:
-                if isinstance(dampening, Dampening):
-                    damp_value = dampening.value
-                else:
-                    damp_value = 1
-                print("({},{}),".format(delta_T, damp_value))
-                dT += delta_T * damp_value
-                if damp_value < 1:
-                    transient_over = False
-
-            print("]")
-            return (dT, transient_over)
-
-        def _clean():
-            print("CLEAN")
-            # self._changes = [(new_input, 1)]
-            new_dT, can_clean = calculcate_dT()
-            print("old_dt : {} | new_dt : {}".format(old_dT, new_dT))
-            dT = new_dT
-            return dT
-
-        if not math.isclose(new_input, self.last_input, rel_tol=0.1):
-            # command changed
-            delta_input = new_input - self.last_input
-            print("Delta Command : {}".format(delta_input))
-            _dampening = Dampening(self.tau)
-            _delta_T = delta_input
-            if delta_input < 0:
-                _dampening.drop()
-            else:
-                _dampening.rise()
-            self._changes.append([delta_input, _dampening])
-
-            dT, can_clean = calculcate_dT()
-            self.last_input = new_input
-
-        else:
-            # Nothing change, clean and continue
-            old_dT, can_clean = calculcate_dT()
-            if can_clean:
-                dT = new_input
-                self._changes = [(new_input, 1)]
-            else:
-                dT = old_dT
-
-        self.last_offset = dT
-        output = self._effect() * dT
 
         if self.max_output:
             output = min(output, self.max_output)
