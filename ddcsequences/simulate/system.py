@@ -270,6 +270,14 @@ class FlexibleInput(object):
         else:
             raise ValueError("Not iterable")
 
+    def __getitem__(self, name):
+        if name in self._input.items:
+            return self._input[name]
+
+    def __setitem__(self, name, value):
+        if name in self._input.items:
+            self._input[name] = value
+
 
 class System(object):
     """
@@ -412,12 +420,13 @@ class ADD(System):
 
     INPUT_ELEMENTS = _ELEMENTS(min=1, max=float("inf"))
     INPUT_ELEMENT_FORMAT = (System, list, float, int)
-    CONFIG_PARAMS = []
+    CONFIG_PARAMS = ["elements"]
 
     def __init__(self, system_input, system_output=None, name=None, random_error=0):
         super().__init__(
             system_input, system_output, name=name, random_error=random_error
         )
+        self.elements = self.input
 
     def process(self):
         output = 0
@@ -434,16 +443,16 @@ class SUB(System):
 
     INPUT_ELEMENTS = _ELEMENTS(min=2, max=2)
     INPUT_ELEMENT_FORMAT = (System, list, float, int)
-    CONFIG_PARAMS = []
+    CONFIG_PARAMS = ["element1", "element2"]
 
     def __init__(self, system_input, system_output=None, name=None, random_error=0):
         super().__init__(
             system_input, system_output, name=name, random_error=random_error
         )
+        self.element1, self.element2 = self.input
 
     def process(self):
-        a, b = self.input
-        return a.value - b.value
+        return self.element1.value - self.element2.value
 
 
 class HEAT(System):
@@ -498,17 +507,18 @@ class MIX(System):
 
     INPUT_ELEMENTS = _ELEMENTS(min=2, max=2)
     INPUT_ELEMENT_FORMAT = MixInputElement
-    CONFIG_PARAMS = []
+    CONFIG_PARAMS = ["element1", "element2"]
 
     def __init__(self, system_input, system_output=None, name=None, random_error=0):
         super().__init__(
             system_input, system_output, name=name, random_error=random_error
         )
+        self.element1, self.element2 = self.input
 
     def process(self):
-        item1, item2 = self.input
-        T1, V1 = item1.value
-        T2, V2 = item2.value
+        # item1, item2 = self.input
+        T1, V1 = self.element1.value
+        T2, V2 = self.element2.value
 
         T = ((V1 * T1) + (V2 * T2)) / (V1 + V2)
 
