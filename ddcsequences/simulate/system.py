@@ -412,6 +412,52 @@ class System(object):
                 self.name = value
 
 
+class PASSTHRU(System):
+    """
+    Simple system that adds the values contained in the input
+    Input must be a list of things to add
+    """
+
+    INPUT_ELEMENTS = _ELEMENTS(min=1, max=1)
+    INPUT_ELEMENT_FORMAT = (System, list, float, int)
+    CONFIG_PARAMS = ["element1"]
+
+    def __init__(self, system_input, system_output=None, name=None, random_error=0):
+        super().__init__(
+            system_input, system_output, name=name, random_error=random_error
+        )
+        self.element1 = self.input
+
+    def process(self):
+        return self.element1
+
+
+class SELECT(System):
+    """
+    Simple system that adds the values contained in the input
+    Input must be a list of things to add
+    """
+
+    INPUT_ELEMENTS = _ELEMENTS(min=2, max=2)
+    INPUT_ELEMENT_FORMAT = (System, list, float, int)
+    CONFIG_PARAMS = ["element1", "element2", "selection"]
+
+    def __init__(
+        self, system_input, system_output=None, name=None, random_error=0, select=False
+    ):
+        super().__init__(
+            system_input, system_output, name=name, random_error=random_error
+        )
+        self.element1, self.element2 = self.input
+        self.selection = select
+
+    def process(self):
+        if self.selection:
+            return self.element2
+        else:
+            return self.element1
+
+
 class ADD(System):
     """
     Simple system that adds the values contained in the input
@@ -564,6 +610,56 @@ class LINEAR(System):
         return sensor + (self._effect() * delta)
 
 
+class SPAN(System):
+    """
+    Simple linear system that will compute an output based on a 
+    maximum delta depending on a command.
+    """
+
+    INPUT_ELEMENTS = _ELEMENTS(min=1, max=1)
+    INPUT_ELEMENT_FORMAT = (System, ValueElement, int, float)
+    CONFIG_PARAMS = ["xrange_A", "xrange_B", "yrange_A", "yrange_B"]
+
+    def __init__(
+        self,
+        system_input,
+        system_output=None,
+        name=None,
+        xrange_A=0,
+        xrange_B=100,
+        yrange_A=0,
+        yrange_B=100,
+        use_command=False,
+        random_error=0,
+    ):
+        super().__init__(
+            system_input, system_output, name=name, random_error=random_error
+        )
+        self.xrange_A = xrange_A
+        self.xrange_B = xrange_B
+        self.yrange_A = yrange_A
+        self.yrange_B = yrange_B
+
+    def process(self):
+        if isinstance(self.input, ValueElement):
+            new_input = self.input.value["value"]
+        else:
+            new_input = self.input.value
+
+        if new_input <= self.xrange_A:
+            y = self.yrange_A
+        elif new_input >= self.xrange_B:
+            y = self.yrange_B
+
+        else:
+            # prop = (new_input / (self.input_max - self.input_min))
+            m = (self.yrange_B - self.yrange_A) / (self.xrange_B - self.xrange_A)
+            b = self.yrange_A - m * (self.xrange_A)
+            # y = mx + b
+            y = m * new_input + b
+        return y
+
+
 class TRANSIENT(System):
     """
     System that will increase or decrease an input
@@ -572,7 +668,7 @@ class TRANSIENT(System):
     """
 
     INPUT_ELEMENTS = _ELEMENTS(min=1, max=1)
-    INPUT_ELEMENT_FORMAT = (ValueCommandElement, ValueElement)
+    INPUT_ELEMENT_FORMAT = (System, ValueCommandElement, ValueElement)
     CONFIG_PARAMS = [
         "delta_max",
         "min_output",
@@ -593,6 +689,7 @@ class TRANSIENT(System):
         min_output=None,
         max_output=None,
         tau=10,
+        # initial_output=0,
         decrease=False,
         random_error=0,
     ):
@@ -635,6 +732,8 @@ class TRANSIENT(System):
 
     def process_value_command_element(self):
         sensor, command = self.input
+        if callable(command):
+            command = command()
 
         # def calculcate_dT():
         #    _transient_over_list = []
@@ -689,8 +788,11 @@ class TRANSIENT(System):
         output = sensor + (self._effect() * dT)
         return output
 
-    def process_value_element(self):
-        new_input = self.input.value["value"]
+    def process_value_element(self, force_input=None):
+        if force_input:
+            new_input = force_input
+        else:
+            new_input = self.input.value["value"]
         if isinstance(new_input, System):
             new_input = new_input.output
 
@@ -749,12 +851,15 @@ class TRANSIENT(System):
 
     def process(self):
         output = None
+
         if isinstance(self.input.value, ValueCommandElement):
             output = self.process_value_command_element()
         elif isinstance(self.input.value, ValueElement):
             output = self.process_value_element()
         else:
-            output = float("-inf")
+            # if isinstance(self.input, System):
+            output = self.process_value_element(self.input.value)
+            # output = float("-inf")
 
         if self.max_output:
             output = min(output, self.max_output)
