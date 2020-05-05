@@ -5,10 +5,12 @@
 #
 # Licensed under LGPLv3, see file LICENSE in this source tree.
 
-from .equipment import ParallelPumps, Pump, Chiller, Fan
+from .equipment import EquipmentGroup, Pump, Chiller, Fan
 
 from BAC0.core.devices import Device
 import pprint
+
+_classes = {"Pump": Pump, "ParallelPumps": ParallelPumps}
 
 
 def create_pump():
@@ -45,48 +47,34 @@ def help(name):
     print("new_config = create.config['{}']".format(name))
 
 
-def parallel_pumps(controller=None, config=None):
-    if not config:
-        return help("parallel_pumps")
+def create(controller, config=None):
     controller = controller
-    # if not isinstance(controller, Device):
-    #    raise ValueError("Provide a BAC0 controller.")
-
-    p1_p2 = ParallelPumps(
-        pump1_start_command=controller[config["p1_start"]],
-        pump2_start_command=controller[config["p2_start"]],
-        pump1_modulation=controller[config["p1_modulation"]],
-        pump2_modulation=controller[config["p2_modulation"]],
-        succion_pressure=controller[config["succion_pressure"]],
-        delta_p=config["delta_p"],
-        max_flow=config["max_flow"],
-        pump1_name=config["pump1_name"],
-        pump2_name=config["pump2_name"],
-    )
-    print(
-        "Defining match values for both pumps status on {} and {}.".format(
-            config["p1_status"], config["p2_status"]
-        )
-    )
-    controller[config["p1_status"]].match_value(p1_p2[config["pump1_name"]].status)
-    controller[config["p2_status"]].match_value(p1_p2[config["pump2_name"]].status)
-    if config["set_succion_pressure"]:
-        print(
-            "Setting basic succion pressure {} to {}.".format(
-                config["succion_pressure"], config["set_succion_pressure"]
-            )
-        )
-        controller[config["succion_pressure"]] = float(config["set_succion_pressure"])
-    if config["discharge_pressure"]:
-        print(
-            "Defining match values for discharge pressure on {}.".format(
-                config["discharge_pressure"]
-            )
-        )
-        controller[config["discharge_pressure"]].match_value(p1_p2.pressure)
-    if config["flow_sensor"]:
-        print(
-            "Defining match values for flow sensor on {}.".format(config["flow_sensor"])
-        )
-        controller[config["flow_sensor"]].match_value(p1_p2.flow)
-    return p1_p2
+    config = config[key]
+    name = config["name"]
+    _equip = _classes[config["class"]](name=name)
+    try:
+        for k, v in config["statics"].items():
+            if k == "members":
+                _members = []
+                for each in v:
+                    _members.append(Equipment.defined[each])
+                setattr(_equip, "members", _members)
+                continue
+            if v:
+                setattr(_equip, k, v)
+    except AttributeError:
+        pass
+    try:
+        for k, v in config["inputs"].items():
+            if v:
+                var = controller[v]
+                setattr(_equip, k, var)
+    except AttributeError:
+        pass
+    try:
+        for k, v in config["outputs"].items():
+            if v:
+                controller[v].match_value(getattr(_equip, k))
+    except AttributeError:
+        pass
+    return _equip

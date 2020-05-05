@@ -7,6 +7,7 @@ from ddcsequences.simulate.system import (
     MixInputElement,
     MIX,
     LINEAR,
+    TRANSIENT,
 )
 
 
@@ -33,3 +34,12 @@ def test_linear():
     assert VFD.output == 20
     VFD["command"] = 50
     assert VFD.output == 10
+
+
+# def test_transient():
+#    i = ValueCommandElement(0, 100)
+#    VFD = TRANSIENT(i, delta_max=20)
+#    assert VFD.output == 0
+#    VFD.output
+#    VFD["command"] = 50
+#    assert VFD.output == 10

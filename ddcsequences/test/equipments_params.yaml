@@ -1,0 +1,12 @@
+pump:
+    class: Pump
+    description: My pump
+    statics:
+    
+    input:
+        start_command: P1-C
+    outputs:    
+        status: P1-S
+
+
+        

@@ -776,6 +776,7 @@ class TRANSIENT(System):
 
             dT, can_clean = self.calculcate_dT()
             self.last_command = command
+            self.t_0 = _dampening.t0
 
         else:
             # Nothing change, clean and continue
@@ -835,6 +836,7 @@ class TRANSIENT(System):
 
             dT, can_clean = self.calculcate_dT()
             self.last_input = new_input
+            self.t_0 = _dampening.t0
 
         else:
             # Nothing change, clean and continue
