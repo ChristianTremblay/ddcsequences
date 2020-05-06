@@ -504,12 +504,10 @@ class Valve(Equipment):
         return self._leaving_flow.output
 
 
-class TankWithProximityLevels(Equipment):
+class Tank(Equipment):
     @staticmethod
     def getprop(self, name, i):
         def xget(self):
-            # print("Get {}".format(name))
-            # print(self.output_list[i])
             self.refresh()
             try:
                 return lambda: self.proximity()[i]
@@ -526,27 +524,21 @@ class TankWithProximityLevels(Equipment):
         self.output_list = [False] * number_of_switches
 
     def proximity(self):
-        # def update_equipment(self):
         _number_of_switches = self.number_of_switches
         _level_per_switch = 100 / _number_of_switches
         a = range(0, 101, int(_level_per_switch))
         base = [True] * _number_of_switches
         find = Equipment.get_value(self.level)
         idx = min(range(len(a)), key=lambda i: abs(a[i] - find))
-        # print(a[idx], idx)
         mask = [
             True if i < idx else False
             for i, x in enumerate(range(0, _number_of_switches))
         ]
         return base and mask
 
-    def _add_method(self, name, arg):
+    def _add_property(self, name, arg):
         self.__setattr__("_" + name, None)
-        setattr(
-            self.__class__,
-            name,
-            property(TankWithProximityLevels.getprop(self, name, arg)),
-        )
+        setattr(self.__class__, name, property(Tank.getprop(self, name, arg)))
 
 
 class Room(Equipment):
@@ -574,19 +566,38 @@ def create_equip(controller, config=None, name=None):
     This function helps in the creation of equipments.
     It relies on a config dict to generate equipments
     and make all the links with the BAC0 device.
+
+    The yaml file format is : 
+    
+    name:
+        class: Classname
+        description: str
+        statics:
+            variable1: value
+            variable2: value 
+        inputs:
+            variable1: Name_of_BAC0_point
+        outputs:
+            variable1: Name_of_BAC0_point
+        add_property:
+            level0:
+                proximity: [LT-2G, 0]
+
+    Inputs and outputs sections will generate a match_value between the
+    variable of the equipment and the BAC0 point.
+
+
     """
     _classes = {
         "Pump": Pump,
         "ParallelPumps": ParallelPumps,
         "Chiller": Chiller,
         "Valve": Valve,
-        "TankWithProximityLevels": TankWithProximityLevels,
+        "Tank": Tank,
     }
     controller = controller
-    # config = config[key]
-    # name = config["name"]
     try:
-        _equip = _classes[config["class"]](name=name)
+        _equip = _classes[config["class"]](name=name, description=config["description"])
     except KeyError:
         raise ConfigFileError(
             "Can't create an equipment of type {}.".format(config["class"])
@@ -605,38 +616,32 @@ def create_equip(controller, config=None, name=None):
         pass
     try:
         for k, v in config["inputs"].items():
-            if v:
+            if v and controller:
                 var = controller[v]
                 setattr(_equip, k, var)
     except (AttributeError, KeyError):
         pass
     try:
-        for name_of_method, params in config["add_methods"].items():
-            if params:
-                _args = []
-                for base_method, value in params.items():
-                    _mthd = getattr(_equip, base_method)
-
-                    target, arg = value
-                    # setattr(_equip,name_of_method,lambda x: _equip.output_list[arg])
-                    # new_method = lambda: _mthd(int(arg))
-                    _equip._add_method(name_of_method, arg)
-                    # print("New method : {} | {}".format(name_of_method, arg))
-                    controller[target].match_value(getattr(_equip, name_of_method))
+        for property_name, params in config["add_property"].items():
+            _equip._add_property(property_name, params)
     except (AttributeError, KeyError):
         pass
     try:
         for k, v in config["outputs"].items():
             if v:
-                controller[v].match_value(getattr(_equip, k))
+                if controller:
+                    controller[v].match_value(getattr(_equip, k))
     except (AttributeError, KeyError):
         pass
 
     return _equip
 
 
-def generate(controller, filename):
-    params = open_config_file(filename)
+def generate(controller, config):
+    if isinstance(config, dict):
+        params = config
+    else:
+        params = open_config_file(config)
     # new_equip = []
     for k, v in params.items():
         print("Creating {} | {}".format(k, v["description"]))

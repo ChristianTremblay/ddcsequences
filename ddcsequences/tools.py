@@ -33,7 +33,7 @@ def var_name(point):
     return name
 
 
-def wait_for_state(point, state, *, callback=None, timeout=180):
+def wait_for_state(point, state, *, callback=None, timeout=180, log_only=True):
     """
     This function will read a point and wait for its state to match the 
     state parameter value. Common use case is to wait until a point reach 
@@ -61,20 +61,22 @@ def wait_for_state(point, state, *, callback=None, timeout=180):
             )
             break
         elif time.time() > tout:
-            # raise TimeoutError('Wrong state after waiting a long time.')
-            add_error(
-                point.properties.device,
-                "Timeout : %s in wrong state (%s != %s) after %s sec"
-                % (var_name(point), format_variable_value(point), state, timeout),
+            msg = "Timeout : {} in wrong state ({} != {}) after {} sec".format(
+                var_name(point), format_variable_value(point), state, timeout
             )
-            break
+
+            if not log_only:
+                raise TimeoutError(msg)
+            else:
+                add_error(point.properties.device, msg)
+                break
         time.sleep(2)
     # State is now correct, execute callback
     if callback is not None:
         callback()
 
 
-def wait_for_state_not(point, state, *, callback=None, timeout=180):
+def wait_for_state_not(point, state, *, callback=None, timeout=180, log_only=True):
     """
     This function will read a point and wait for its state to diverge from the 
     state parameter value. Common use case is to wait until a point quits 
@@ -99,19 +101,24 @@ def wait_for_state_not(point, state, *, callback=None, timeout=180):
             )
             break
         elif time.time() > tout:
-            add_error(
-                point.properties.device,
-                "Timeout : %s didn't change state (%s == %s) after %s sec"
-                % (var_name(point), format_variable_value(point), state, timeout),
+            msg = "Timeout : {} in wrong state ({} != {}) after {} sec".format(
+                var_name(point), format_variable_value(point), state, timeout
             )
-            break
+
+            if not log_only:
+                raise TimeoutError(msg)
+            else:
+                add_error(point.properties.device, msg)
+                break
         time.sleep(2)
     # State is now correct, execute callback
     if callback is not None:
         callback()
 
 
-def wait_for_value_gt(point, value, *, callback=None, timeout=90, maximum=None):
+def wait_for_value_gt(
+    point, value, *, callback=None, timeout=90, maximum=None, log_only=True
+):
     """
     This function will read a point and wait for its value to be greater than 
     the value parameter. 
@@ -144,20 +151,25 @@ def wait_for_value_gt(point, value, *, callback=None, timeout=90, maximum=None):
             )
             break
         elif time.time() > tout:
-            # raise TimeoutError('Variable not yet greater than value after timeout')
-            add_error(
-                point.properties.device,
-                "Timeout : %s (value = %s) not greater than %.2f after %s sec"
-                % (var_name(point), format_variable_value(point), value, timeout),
+            msg = "Timeout : {} in wrong state ({} != {}) after {} sec".format(
+                var_name(point), format_variable_value(point), state, timeout
             )
-            break
+
+            # raise TimeoutError('Variable not yet greater than value after timeout')
+            if not log_only:
+                raise TimeoutError(msg)
+            else:
+                add_error(point.properties.device, msg)
+                break
         time.sleep(2)
     # State is now correct, execute callback
     if callback is not None:
         callback()
 
 
-def wait_for_value_lt(point, value, *, callback=None, timeout=90, minimum=None):
+def wait_for_value_lt(
+    point, value, *, callback=None, timeout=90, minimum=None, log_only=True
+):
     """
     This function will read a point and wait for its value to be less than 
     the value parameter. 
@@ -190,20 +202,23 @@ def wait_for_value_lt(point, value, *, callback=None, timeout=90, minimum=None):
             )
             break
         elif time.time() > tout:
-            # raise TimeoutError('Variable not yet less than value after timeout')
-            add_error(
-                point.properties.device,
-                "Timeout : %s (value = %s) not less than %.2f after %s sec"
-                % (var_name(point), format_variable_value(point), value, timeout),
+            msg = "Timeout : {} in wrong state ({} != {}) after {} sec".format(
+                var_name(point), format_variable_value(point), state, timeout
             )
-            break
+
+            # raise TimeoutError('Variable not yet less than value after timeout')
+            if not log_only:
+                raise TimeoutError(msg)
+            else:
+                add_error(point.properties.device, msg)
+                break
         time.sleep(2)
     # State is now correct, execute callback
     if callback is not None:
         callback()
 
 
-def check_that(point, value, *, callback=None, timeout=90):
+def check_that(point, value, *, callback=None, timeout=90, log_only=True):
     """
     This function will read a point and check if its value fits the value
     parameter.
@@ -224,11 +239,13 @@ def check_that(point, value, *, callback=None, timeout=90):
             add_note(point.properties.device, "%s is %s" % (var_name(point), value))
             break
         elif time.time() > tout:
-            add_error(
-                point.properties.device,
-                "Problem : %s is not %s, it is %s after %s sec"
-                % (var_name(point), value, format_variable_value(point), timeout),
+            msg = "Timeout : {} in wrong state ({} != {}) after {} sec".format(
+                var_name(point), format_variable_value(point), state, timeout
             )
+            if not log_only:
+                raise TimeoutError(msg)
+            else:
+                add_error(point.properties.device, msg)
             break
         time.sleep(2)
     # State is now correct, execute callback
@@ -236,7 +253,9 @@ def check_that(point, value, *, callback=None, timeout=90):
         callback()
 
 
-def check_isclose(point, value, *, rtol=1e-02, atol=1e-02, callback=None, timeout=90):
+def check_isclose(
+    point, value, *, rtol=1e-02, atol=1e-02, callback=None, timeout=90, log_only=True
+):
     """
     This function will read a point and check if its value is closed to the value
     parameter.
@@ -260,11 +279,13 @@ def check_isclose(point, value, *, rtol=1e-02, atol=1e-02, callback=None, timeou
             )
             break
         elif time.time() > tout:
-            add_error(
-                point.properties.device,
-                "Problem : %s is not close to %s, it is %s after %s sec"
-                % (var_name(point), value, format_variable_value(point), timeout),
+            msg = "Timeout : {} is not close to {}, it is {} after {} sec".format(
+                var_name(point), format_variable_value(point), state, timeout
             )
+            if not log_only:
+                raise TimeoutError(msg)
+            else:
+                add_error(point.properties.device, msg)
             break
         time.sleep(2)
     # State is now correct, execute callback
