@@ -1,0 +1,10 @@
+/ddcsequences.egg-info
+/dist
+/build
+/doc/build
+/.pytest_cache
+/ddcsequences/test/__pycache__
+BAC0.bin
+BAC0.db
+*.log
+/.vscode
