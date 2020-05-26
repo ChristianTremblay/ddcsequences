@@ -9,4 +9,127 @@ pump:
         status: P1-S
 
 
-        
+# Equipment definition
+#name:
+#    class: NameOfClassToBeUsed
+#    description:
+#    name: Name of the equipment
+#    statics: # variables to be set as simple values
+#        list:
+#        of_variables:
+#        to_set_but_that:
+#        are_not_link_to_controller:
+#    inputs: # variable whom value comes from controller
+#        variable: Name of point in the controller
+#    outputs:
+#        variable_name: Name of point to use in definition of match_value
+
+#FCV-1:
+#    class: Valve
+#    description: Valve debit bassin 2
+#    statics:
+#        mode: heating
+#        delta_T:
+#        max_flow: 400
+#        min_temperature: 5.2
+#        max_temperature:
+#        tau:
+#        entering_temp: 
+#    inputs:
+#        flow:
+#        entering_temp:
+#        modulation: FCV1-O
+#    outputs:
+#        leaving_temp: 
+#        leaving_flow: 
+#
+#FCV-1A:
+#    class: Valve
+#    description: Valve debit bassin 1
+#    statics:
+#        mode: heating
+#        delta_T:
+#        max_flow: 150
+#        min_temperature: 5.2
+#        max_temperature:
+#        tau:
+#        entering_temp: 
+#    inputs:
+#        flow:
+#        entering_temp:
+#        modulation: FCV1A-O
+#    outputs:
+#        leaving_temp: 
+#        leaving_flow: FE-Q12
+#
+#TCV3:
+#    class: Valve
+#    description: Valve echangeur bassin 1
+#    statics:
+#        mode: cooling
+#        delta_T: 10
+#        min_output: 5.2
+#        max_output:
+#        tau:
+#        entering_temp: 25
+#    inputs:
+#        flow:
+#        entering_temp:
+#        modulation: TANK1_CLG-O
+#    outputs:
+#        leaving_temp: TE-3
+#        leaving_flow: 
+#
+#TCV3A:
+#    class: Valve
+#    description: Valve echangeur bassin 2
+#    statics:
+#        mode: cooling
+#        delta_T: 10
+#        min_output: 5.2
+#        max_output:
+#        tau:
+#        entering_temp: 25
+#    inputs:
+#        flow:
+#        entering_temp:
+#        modulation: TANK2_CLG-O
+#    outputs:
+#        leaving_temp: TE-3A
+#        leaving_flow: 
+#
+#TANK1:
+#    class: Tank
+#    description: Bassin 1
+#    statics:
+#        level: 0
+#        number_of_switches: 7
+#    add_property:
+#        level0: 0
+#        level1: 1
+#        level2: 2
+#        level3: 3
+#        level4: 4
+#        level5: 5
+#        level6: 6
+#    inputs:
+#    outputs:
+#        level0: LT-2G
+#        level1: LT-2F
+#        level2: LT-2E
+#        level3: LT-2D
+#        level4: LT-2C
+#        level5: LT-2B
+#        level6: LT-2A
+#      
+#MOAD:
+#    class: MixedAirDampers
+#    description: Mixed Air Dampers
+#    statics:
+#        tau:
+#    inputs:
+#        outdoor_air_temp: OA-T
+#        return_air_temp: RA-T
+#        modulation: MOAD-O
+#    outputs:
+#        mixed_air_temp: MA-T

@@ -103,13 +103,19 @@ class Equipment:
     defined = {}
 
     @staticmethod
-    def get_value(value):
+    def get_value(value, convert_boolean=False):
         if isinstance(value, Point):
             _value = value.lastValue
             if _value == "active":
-                return True
+                if convert_boolean:
+                    return 100
+                else:
+                    return True
             elif _value == "inactive":
-                return False
+                if convert_boolean:
+                    return 0
+                else:
+                    return False
             else:
                 return _value
         else:
@@ -421,10 +427,6 @@ class Chiller(OnOffDevice):
         self.refresh()
         return self._cwlt.last_value - (self._cwlt.delta_max * self.get_normalized())
 
-    #    def set_command(self, value):
-    #        self._chwlt.input["command"] = value
-    #        self._cwlt.input["command"] = value
-
     def __repr__(self):
         return "Chiller"
 
@@ -541,11 +543,121 @@ class Tank(Equipment):
         setattr(self.__class__, name, property(Tank.getprop(self, name, arg)))
 
 
+class MixedAirDampers(Equipment):
+    def __init__(
+        self,
+        name=None,
+        description=None,
+        damper_command=0,
+        outdoor_air_temp=0,
+        return_air_temp=21,
+        tau=10,
+    ):
+        super().__init__(name=name, description=description)
+        self.damper_command = damper_command
+        self.outdoor_air_temp = outdoor_air_temp
+        self.return_air_temp = return_air_temp
+
+        self._outdoor_air_temp = MixInputElement(
+            Equipment.get_value(self.outdoor_air_temp),
+            Equipment.get_value(self.damper_command),
+        )
+        self._return_air_temp = MixInputElement(
+            Equipment.get_value(self.return_air_temp),
+            Equipment.get_value(self.return_air_modulation),
+        )
+        self.tau = tau
+
+        self._temperature = TRANSIENT(
+            MIX([self._outdoor_air_temp, self._return_air_temp]), tau=self.tau
+        )
+        self.systems = [self._temperature]
+
+    @property
+    def return_air_modulation(self):
+        return 100 - Equipment.get_value(self.damper_command)
+
+    def update_equipment(self):
+        self._temperature.input._input["element1"]["value"] = Equipment.get_value(
+            self.outdoor_air_temp
+        )
+        self._temperature.input._input["element1"]["quantity"] = Equipment.get_value(
+            self.damper_command
+        )
+        self._temperature.input._input["element2"]["value"] = Equipment.get_value(
+            self.return_air_temp
+        )
+        self._temperature.input._input["element2"]["quantity"] = Equipment.get_value(
+            self.return_air_modulation
+        )
+
+    def mixed_air_temp(self):
+        self.refresh()
+        return self._temperature.output
+
+
+class DX_Cooling_Stage(Equipment):
+    def __init__(
+        self,
+        name=None,
+        description=None,
+        modulation=100,
+        entering_temp=0,
+        delta_T=7,
+        min_temperature=0,
+        max_temperature=float("inf"),
+        tau=10,
+    ):
+        super().__init__(name=name, description=description)
+        self.modulation = modulation
+        self.entering_temp = entering_temp
+
+        # Eventually, calculate delta_T vs flow
+        self.delta_T = delta_T
+
+        self.min_temperature = min_temperature
+        self.max_temperature = max_temperature
+
+        self.tau = tau
+        self._temperature = TRANSIENT(
+            ValueCommandElement(0, 0),
+            delta_max=self.delta_T,
+            min_output=self.min_temperature,
+            tau=self.tau,
+            decrease=True,
+        )
+        self.systems = [self._temperature]
+
+        self._temperature.input["command"] = Equipment.get_value(
+            self.modulation, convert_boolean=True
+        )
+        self._temperature.input["value"] = Equipment.get_value(self.entering_temp)
+
+    def update_equipment(self):
+        if Equipment.get_value(self.modulation, convert_boolean=True) > 0:
+            self._temperature.input["command"] = Equipment.get_value(
+                self.modulation, convert_boolean=True
+            )
+            self._temperature.input["value"] = Equipment.get_value(self.entering_temp)
+        else:
+            self._temperature.input["command"] = 0
+            self._temperature.input["value"] = Equipment.get_value(self.entering_temp)
+
+    def leaving_temp(self):
+        self.refresh()
+        return self._temperature.output
+
+
 class Room(Equipment):
     def __init__(self):
         pass
         # idea...
         # would be a MIX
+
+
+class AHU(EquipmentGroup):
+    def __init__(self):
+        pass
 
 
 # ///////////////////////////////////////////////////////////////

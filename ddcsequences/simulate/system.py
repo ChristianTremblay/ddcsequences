@@ -793,7 +793,11 @@ class TRANSIENT(System):
         if force_input:
             new_input = force_input
         else:
-            new_input = self.input.value["value"]
+            # Called twice ? Why does block here...when input is a MIX
+            try:
+                new_input = self.input.value["value"]
+            except TypeError:
+                new_input = force_input
         if isinstance(new_input, System):
             new_input = new_input.output
 
@@ -860,7 +864,10 @@ class TRANSIENT(System):
             output = self.process_value_element()
         else:
             # if isinstance(self.input, System):
-            output = self.process_value_element(self.input.value)
+            try:
+                output = self.process_value_element(force_input=self.input.value)
+            except TypeError as error:
+                print(self.input.value, error)
             # output = float("-inf")
 
         if self.max_output:
