@@ -109,12 +109,6 @@ class InputElement(object):
         else:
             return item
 
-    # def __setattr__(self, name, value):
-    #    if name in self.items:
-    #        self.__dict__[name] = value
-    #    else:
-    #        raise AttributeError("{} doesn't exist".format(name))
-
     def __getitem__(self, name):
         if name in self.items:
             return getattr(self, name)
@@ -161,7 +155,6 @@ class ValueCommandElement(InputElement):
     def __iter__(self):
         for each in [self.value, self.command]:
             yield each
-        # return [self.value, self.command]
 
     def __repr__(self):
         return "Value : {} | Command : {}".format(self.value, self.command)
@@ -251,10 +244,6 @@ class FlexibleInput(object):
             return self._input()
         elif isinstance(self._input, System):
             return self._input.output
-        # elif isinstance(self._input, ValueCommandElement):
-        #    return [element for element in self._input]
-        # elif isinstance(self._input, MixInputElement):
-        #    return [element for element in self._input]
         else:
             return self._input
 
@@ -339,36 +328,13 @@ class System(object):
             )
 
             _n = []
-            # good = []
             for each in system_input:
-                #    if isinstance(self.INPUT_ELEMENT_FORMAT, list):
-                #        for each in self.INPUT_ELEMENT_FORMAT:
-                #            #for _input in system_input:
-                #                #good.append(isinstance(_input, self.INPUT_ELEMENT_FORMAT))
-                #            good.append(isinstance(system_input, each))
-                #    else:
-                #        for each in system_input:
-                #            good.append(isinstance(system_input, self.INPUT_ELEMENT_FORMAT))
-                #    assert any(good)
-                # print(type(each))
-                # print(type(self.INPUT_ELEMENT_FORMAT))
-                # print(self.INPUT_ELEMENT_FORMAT)
                 assert isinstance(each, self.INPUT_ELEMENT_FORMAT)
                 _n.append(FlexibleInput(each))
             new_input = _n
 
         else:
             if self.INPUT_ELEMENT_FORMAT:
-                # good = []
-                # if isinstance(self.INPUT_ELEMENT_FORMAT, list):
-                #    for each in self.INPUT_ELEMENT_FORMAT:
-                #        good.append(isinstance(system_input, each))
-                # else:
-                #    good.append(isinstance(system_input, self.INPUT_ELEMENT_FORMAT))
-                # assert any(good)
-                # print(type(system_input))
-                # print(type(self.INPUT_ELEMENT_FORMAT))
-                # print(self.INPUT_ELEMENT_FORMAT)
                 assert isinstance(system_input, self.INPUT_ELEMENT_FORMAT)
             new_input = FlexibleInput(system_input)
         return new_input
@@ -689,7 +655,6 @@ class TRANSIENT(System):
         min_output=None,
         max_output=None,
         tau=10,
-        # initial_output=0,
         decrease=False,
         random_error=0,
     ):
@@ -717,17 +682,14 @@ class TRANSIENT(System):
         _transient_over_list = []
         dT = 0
         transient_over = True
-        # print("Calculate Changes\n[")
         for delta_T, dampening in self._changes:
             if isinstance(dampening, Dampening):
                 damp_value = dampening.value
             else:
                 damp_value = 1
-            # print("({},{}),".format(delta_T, damp_value))
             dT += delta_T * damp_value
             if damp_value < 1:
                 transient_over = False
-        # print("]")
         return (dT, transient_over)
 
     def process_value_command_element(self):
@@ -735,37 +697,15 @@ class TRANSIENT(System):
         if callable(command):
             command = command()
 
-        # def calculcate_dT():
-        #    _transient_over_list = []
-        #    dT = 0
-        #    transient_over = True
-        #    # print('Calculate Changes\n[')
-        #    for delta_T, dampening in self._changes:
-        #        if isinstance(dampening, Dampening):
-        #            damp_value = dampening.value
-        #        else:
-        #            damp_value = 1
-        #        # print('({},{}),'.format(delta_T,damp_value))
-        #        dT += delta_T * damp_value
-        #        if damp_value < 1:
-        #            transient_over = False
-        #
-        #    # print(']')
-        #    return (dT, transient_over)
-
         def _clean():
-            # print('CLEAN')
             _delta_T = (command / 100) * self.delta_max
             self._changes = [(_delta_T, 1)]
             new_dT, can_clean = self.calculcate_dT()
-            # print('old_dt : {} | new_dt : {}'.format(old_dT, new_dT))
             dT = new_dT
             return dT
 
         if not math.isclose(command, self.last_command, rel_tol=0.1):
-            # command changed
             delta_command = command - self.last_command
-            # print('Delta Command : {}'.format(delta_command))
             _dampening = Dampening(self.tau)
             _delta_T = (delta_command / 100) * self.delta_max
             if delta_command < 0:
@@ -801,35 +741,13 @@ class TRANSIENT(System):
         if isinstance(new_input, System):
             new_input = new_input.output
 
-        # def calculcate_dT():
-        #    _transient_over_list = []
-        #    dT = 0
-        #    transient_over = True
-        #    #print("Calculate Changes\n[")
-        #    for delta_T, dampening in self._changes:
-        #        if isinstance(dampening, Dampening):
-        #            damp_value = dampening.value
-        #        else:
-        #            damp_value = 1
-        #        #print("({},{}),".format(delta_T, damp_value))
-        #        dT += delta_T * damp_value
-        #        if damp_value < 1:
-        #            transient_over = False
-        #    #print("]")
-        #    return (dT, transient_over)
-
         def _clean():
-            # print("CLEAN")
-            # self._changes = [(new_input, 1)]
             new_dT, can_clean = self.calculcate_dT()
-            # print("old_dt : {} | new_dt : {}".format(old_dT, new_dT))
             dT = new_dT
             return dT
 
         if not math.isclose(new_input, self.last_input, rel_tol=0.1):
-            # command changed
             delta_input = new_input - self.last_input
-            # print("Delta Command : {}".format(delta_input))
             _dampening = Dampening(self.tau)
             _delta_T = delta_input
             if delta_input < 0:

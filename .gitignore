@@ -8,3 +8,5 @@ BAC0.bin
 BAC0.db
 *.log
 /.vscode
+__pycache__
+/ddcsequences/simulate/__pycache__

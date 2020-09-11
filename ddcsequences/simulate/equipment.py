@@ -28,24 +28,15 @@ from .system import (
     SELECT,
 )
 
-
-SCR = HEAT(ValueCommandElement(), kw=1, ls=50)
-CoolingValve = TRANSIENT(
-    ValueCommandElement(), delta_max=10, min_output=5, tau=20, decrease=True
+from .equipments import (
+    Chiller,
+    MixedAirDamper,
+    DX_Cooling_Stage,
+    Pump,
+    ParallelPumps,
+    Tank,
+    Valve,
 )
-HeatingValve = TRANSIENT(
-    ValueCommandElement(), delta_max=10, max_output=50, tau=20, decrease=False
-)
-
-
-def tmp_wrap(func):
-    @wraps(func)
-    def tmp(*args, **kwargs):
-        print(func.__name__)
-        arg = int(func.__name__)
-        return func(*args, **kwargs)
-
-    return tmp
 
 
 class EquipmentGroup:
@@ -71,21 +62,16 @@ class EquipmentGroup:
         EquipmentGroup.defined[self.id] = self
 
     def refresh(self):
-        # print("output")
         try:
             for equipment in self.equipments:
-                # print("Executing {}".format(each.name))
                 equipment.refresh()
         except AttributeError:
             pass
-
-        # return [self.name, self.equipments]
 
     def __repr__(self):
         return "{}".format(self.name)
 
     def __getitem__(self, name):
-        # self.refresh() # risk of double refresh
         for equipment in self.equipments:
             if equipment.name == name:
                 return equipment
@@ -134,10 +120,8 @@ class Equipment:
 
     def _call(self, method):
         try:
-            # print('Trying {}'.format(method))
             method()
         except (NotImplementedError, AttributeError) as error:
-            # print('Failed : {}'.format(error))
             pass
 
     def refresh(self):
@@ -167,7 +151,6 @@ class Equipment:
         try:
             for system in self.systems:
                 system.output
-                # print("Updating {}".format(system.name))
         except AttributeError:
             pass
         self._call(self._on_refresh)
@@ -234,435 +217,6 @@ class OnOffDevice(Equipment):
         self._call(self.update_equipment)
 
 
-class Pump(OnOffDevice):
-    """
-    A pump is an OnOffDevice to which we add a TRANSIENT system
-    This system will model the way flow and pressure are impacted 
-    by the start, stop and possible modulation of the pump.
-
-    Note : inputs may also be BAC0.core.devices.Point
-
-    :start_command: (boolean) will start and stop the pump
-    :modulation: (float) default to 100, if modified, will have an impact on TRANSIENT
-    :succion_pressure: (float) typical pressure of loop, should drop when pump is running by simulation can't do that right now
-    :delta_p : (float) increase in pressure when pump is running at max flow
-    :max_flox: (flow) flow when pump is running at 100% modulation, when TRANSIENT effect is over
-    """
-
-    def __init__(
-        self,
-        start_command=False,
-        modulation=100,
-        succion_pressure=10,
-        delta_p=5,
-        max_flow=400,
-        amperage=1,
-        name=None,
-        description=None,
-    ):
-        super().__init__(
-            start_command=start_command, name=name, description=description
-        )
-        self.max_flow = max_flow
-        self.succion_pressure = succion_pressure
-        self.delta_p = delta_p
-        self.modulation = modulation
-        self.max_amperage = amperage
-
-        self._equipment = TRANSIENT(
-            ValueCommandElement(0, 0),
-            delta_max=100,
-            max_output=100,
-            tau=2,
-            decrease=False,
-            random_error=0.1,
-            name="{}".format(self.name),
-        )
-
-        self.systems = [self._equipment]
-
-    def update_equipment(self):
-        # print('Status : {}'.format(self._status))
-        if self._status:
-            # print('Running, updating modulation to {}'.format(self.modulation))
-            self._equipment.input["command"] = Equipment.get_value(self.modulation)
-        self._equipment.output
-
-    def flow(self):
-        self.refresh()
-        return (self._equipment.last_value / 100) * self.max_flow
-
-    def pressure(self):
-        self.refresh()
-        return self.succion_pressure + (
-            (self._equipment.last_value / 100) * self.delta_p
-        )
-
-    def amperage(self):
-        self.refresh()
-        return (self._equipment.last_value / 100) * self.max_amperage
-
-    def _on_start(self):
-        self._equipment.input["command"] = Equipment.get_value(self.modulation)
-
-    def _on_stop(self):
-        self._equipment.input["command"] = 0
-
-
-class ParallelPumps(EquipmentGroup):
-    def __init__(self, members=None, name=None, description=None):
-        super().__init__(name=name, description=description, members=members)
-
-    def flow(self):
-        self.refresh()
-        _flow = 0
-        for each in self.members:
-            _flow += each.flow()
-        return _flow
-
-    def pressure(self):
-        self.refresh()
-        _pressure = 0
-        for each in self.members:
-            _pressure += each.pressure()
-        return _pressure
-
-
-class Fan(Equipment):
-    def __init__(self, start_command, name):
-        super().__init__(start_command=start_command, name=name)
-
-
-class Heater(Equipment):
-    def __init__(self, kw=10, ls=50):
-        self._equipment = HEAT(ValueCommandElement(), kw=1, ls=50)
-        self.systems = [self._equipment]
-
-    def set_flow(self, value):
-        self._equipment.ls = value
-
-
-class Chiller(OnOffDevice):
-    """
-    BAsic approximation of a chiller
-    """
-
-    def __init__(
-        self,
-        name=None,
-        description=None,
-        neutral_temp=20,
-        setpoint=6,
-        start_command=False,
-        modulation=100,
-    ):
-        super().__init__(
-            start_command=start_command, name=name, description=description
-        )
-
-        self.neutral_temperature = neutral_temp
-        self.setpoint = setpoint
-        self.modulation = modulation
-        delta_chill = Equipment.get_value(
-            self.neutral_temperature
-        ) - Equipment.get_value(self.setpoint)
-        self._chwlt = TRANSIENT(
-            ValueCommandElement(),
-            delta_max=delta_chill,
-            min_output=5,
-            tau=60,
-            decrease=True,
-            random_error=0.1,
-            name="Chilled Water Leaving Temp",
-        )
-        self._cwlt = TRANSIENT(
-            ValueCommandElement(),
-            delta_max=20,
-            max_output=40,
-            tau=30,
-            decrease=False,
-            random_error=0.1,
-            name="Condensed Water Leaving Temp",
-        )
-        self._chwlt.input["command"] = Equipment.get_value(self.modulation)
-        self._cwlt.input["command"] = Equipment.get_value(self.modulation)
-        self._chwlt.input["value"] = Equipment.get_value(self.neutral_temperature)
-        self._cwlt.input["value"] = Equipment.get_value(self.neutral_temperature)
-        self.systems = [self._cwlt, self._chwlt]
-
-    def update_equipment(self):
-        if self._status:
-            self._chwlt.input["value"] = Equipment.get_value(self.neutral_temperature)
-            self._cwlt.input["value"] = Equipment.get_value(self.neutral_temperature)
-            self._chwlt.delta_max = Equipment.get_value(
-                self.neutral_temperature
-            ) - Equipment.get_value(self.setpoint)
-            self._chwlt.input["command"] = Equipment.get_value(self.modulation)
-            self._cwlt.input["command"] = Equipment.get_value(self.modulation)
-
-    def _on_stop(self):
-        self._chwlt.input["value"] = Equipment.get_value(self.neutral_temperature)
-        self._cwlt.input["value"] = Equipment.get_value(self.neutral_temperature)
-        self._chwlt.input["command"] = 0
-        self._cwlt.input["command"] = 0
-
-    def chwlt(self):
-        self.refresh()
-        return self._chwlt.last_value
-
-    def cwlt(self):
-        self.refresh()
-        return self._cwlt.last_value
-
-    def get_normalized(self):
-        return self._chwlt.last_value / (
-            self._chwlt.input["value"] - self._chwlt.last_value
-        )
-
-    def chwet(self):
-        self.refresh()
-        return self._chwlt.last_value - (self._chwlt.delta_max * self.get_normalized())
-
-    def cwet(self):
-        self.refresh()
-        return self._cwlt.last_value - (self._cwlt.delta_max * self.get_normalized())
-
-    def __repr__(self):
-        return "Chiller"
-
-
-class Valve(Equipment):
-    _modes = ["heating", "cooling"]
-
-    def __init__(
-        self,
-        name=None,
-        description=None,
-        modulation=100,
-        entering_temp=0,
-        max_flow=400,
-        mode="heating",
-        delta_T=10,
-        min_temperature=float("-inf"),
-        max_temperature=float("inf"),
-        tau=10,
-    ):
-        super().__init__(name=name, description=description)
-        self.modulation = modulation
-        self.entering_temp = entering_temp
-        self.max_flow = max_flow
-        self.mode = mode
-
-        # Eventually, calculate delta_T vs flow
-        self.delta_T = delta_T
-
-        self.min_temperature = min_temperature
-        self.max_temperature = max_temperature
-
-        self.tau = tau
-        _decrease = False
-        if mode.lower() in Valve._modes:
-            self.mode = mode.lower()
-            _decrease = True if self.mode == "cooling" else False
-        else:
-            raise ValueError("Provide valve mode as 'heating' or 'cooling'")
-        self._temperature = TRANSIENT(
-            ValueCommandElement(0, 0),
-            delta_max=self.delta_T,
-            min_output=self.min_temperature,
-            tau=self.tau,
-            decrease=_decrease,
-        )
-        self._leaving_flow = TRANSIENT(
-            ValueCommandElement(0, 0),
-            delta_max=self.max_flow,
-            min_output=0,
-            max_output=self.max_flow,
-            tau=self.tau / 2,
-            decrease=_decrease,
-        )
-        self.systems = [self._temperature, self._leaving_flow]
-
-        self._temperature.input["command"] = Equipment.get_value(self.modulation)
-        self._leaving_flow.input["command"] = Equipment.get_value(self.modulation)
-        self._temperature.input["value"] = Equipment.get_value(self.entering_temp)
-        self._leaving_flow.input["value"] = 0
-
-    def update_equipment(self):
-        self._leaving_flow.input["command"] = Equipment.get_value(self.modulation)
-        if Equipment.get_value(self.modulation) > 0:
-            self._temperature.input["command"] = Equipment.get_value(self.modulation)
-            self._temperature.input["value"] = Equipment.get_value(self.entering_temp)
-        else:
-            self._temperature.input["command"] = 0
-            self._temperature.input["value"] = Equipment.get_value(self.entering_temp)
-
-    def leaving_temp(self):
-        self.refresh()
-        return self._temperature.output
-
-    def leaving_flow(self):
-        self.refresh()
-        return self._leaving_flow.output
-
-
-class Tank(Equipment):
-    @staticmethod
-    def getprop(self, name, i):
-        def xget(self):
-            self.refresh()
-            try:
-                return lambda: self.proximity()[i]
-            except IndexError:
-                return False
-
-        return xget
-
-    def __init__(self, number_of_switches=5, level=0, name=None, description=None):
-        super().__init__(name=name, description=description)
-
-        self.number_of_switches = number_of_switches
-        self.level = level
-        self.output_list = [False] * number_of_switches
-
-    def proximity(self):
-        _number_of_switches = self.number_of_switches
-        _level_per_switch = 100 / _number_of_switches
-        a = range(0, 101, int(_level_per_switch))
-        base = [True] * _number_of_switches
-        find = Equipment.get_value(self.level)
-        idx = min(range(len(a)), key=lambda i: abs(a[i] - find))
-        mask = [
-            True if i < idx else False
-            for i, x in enumerate(range(0, _number_of_switches))
-        ]
-        return base and mask
-
-    def _add_property(self, name, arg):
-        self.__setattr__("_" + name, None)
-        setattr(self.__class__, name, property(Tank.getprop(self, name, arg)))
-
-
-class MixedAirDampers(Equipment):
-    def __init__(
-        self,
-        name=None,
-        description=None,
-        damper_command=0,
-        outdoor_air_temp=0,
-        return_air_temp=21,
-        tau=10,
-    ):
-        super().__init__(name=name, description=description)
-        self.damper_command = damper_command
-        self.outdoor_air_temp = outdoor_air_temp
-        self.return_air_temp = return_air_temp
-
-        self._outdoor_air_temp = MixInputElement(
-            Equipment.get_value(self.outdoor_air_temp),
-            Equipment.get_value(self.damper_command),
-        )
-        self._return_air_temp = MixInputElement(
-            Equipment.get_value(self.return_air_temp),
-            Equipment.get_value(self.return_air_modulation),
-        )
-        self.tau = tau
-
-        self._temperature = TRANSIENT(
-            MIX([self._outdoor_air_temp, self._return_air_temp]), tau=self.tau
-        )
-        self.systems = [self._temperature]
-
-    @property
-    def return_air_modulation(self):
-        return 100 - Equipment.get_value(self.damper_command)
-
-    def update_equipment(self):
-        self._temperature.input._input["element1"]["value"] = Equipment.get_value(
-            self.outdoor_air_temp
-        )
-        self._temperature.input._input["element1"]["quantity"] = Equipment.get_value(
-            self.damper_command
-        )
-        self._temperature.input._input["element2"]["value"] = Equipment.get_value(
-            self.return_air_temp
-        )
-        self._temperature.input._input["element2"]["quantity"] = Equipment.get_value(
-            self.return_air_modulation
-        )
-
-    def mixed_air_temp(self):
-        self.refresh()
-        return self._temperature.output
-
-
-class DX_Cooling_Stage(Equipment):
-    def __init__(
-        self,
-        name=None,
-        description=None,
-        modulation=100,
-        entering_temp=0,
-        delta_T=7,
-        min_temperature=0,
-        max_temperature=float("inf"),
-        tau=10,
-    ):
-        super().__init__(name=name, description=description)
-        self.modulation = modulation
-        self.entering_temp = entering_temp
-
-        # Eventually, calculate delta_T vs flow
-        self.delta_T = delta_T
-
-        self.min_temperature = min_temperature
-        self.max_temperature = max_temperature
-
-        self.tau = tau
-        self._temperature = TRANSIENT(
-            ValueCommandElement(0, 0),
-            delta_max=self.delta_T,
-            min_output=self.min_temperature,
-            tau=self.tau,
-            decrease=True,
-        )
-        self.systems = [self._temperature]
-
-        self._temperature.input["command"] = Equipment.get_value(
-            self.modulation, convert_boolean=True
-        )
-        self._temperature.input["value"] = Equipment.get_value(self.entering_temp)
-
-    def update_equipment(self):
-        if Equipment.get_value(self.modulation, convert_boolean=True) > 0:
-            self._temperature.input["command"] = Equipment.get_value(
-                self.modulation, convert_boolean=True
-            )
-            self._temperature.input["value"] = Equipment.get_value(self.entering_temp)
-        else:
-            self._temperature.input["command"] = 0
-            self._temperature.input["value"] = Equipment.get_value(self.entering_temp)
-
-    def leaving_temp(self):
-        self.refresh()
-        return self._temperature.output
-
-
-class Room(Equipment):
-    def __init__(self):
-        pass
-        # idea...
-        # would be a MIX
-
-
-class AHU(EquipmentGroup):
-    def __init__(self):
-        pass
-
-
-# ///////////////////////////////////////////////////////////////
-
-
 def open_config_file(filename):
     """
     Turns the yaml file into a dict
@@ -706,6 +260,7 @@ def create_equip(controller, config=None, name=None):
         "Chiller": Chiller,
         "Valve": Valve,
         "Tank": Tank,
+        "MixedAirDamper": MixedAirDamper,
     }
     controller = controller
     try:
