@@ -126,10 +126,13 @@ pump:
 #    class: MixedAirDampers
 #    description: Mixed Air Dampers
 #    statics:
+#        outdoor_air_temp: 400
 #        tau:
 #    inputs:
 #        outdoor_air_temp: OA-T
 #        return_air_temp: RA-T
+#        return_air_co2: RA-Q
 #        modulation: MOAD-O
 #    outputs:
 #        mixed_air_temp: MA-T
+#        mixed_air_co2:
