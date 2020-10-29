@@ -19,6 +19,7 @@ setup(
         "ddcsequences.vendors",
         "ddcsequences.vendors.jci",
         "ddcsequences.simulate",
+        "ddcsequences.simulate.equipments",
         "ddcsequences.graph",
     ],
     install_requires=[

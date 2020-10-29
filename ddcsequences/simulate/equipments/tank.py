@@ -31,6 +31,7 @@ class Tank(Equipment):
 
         Works with _add_property(), see below.
         """
+
         def xget(self):
             self.refresh()
             try:

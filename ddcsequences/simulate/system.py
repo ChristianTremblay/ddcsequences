@@ -25,6 +25,21 @@ class Dampening(object):
     In the context of simulation, I want to break the linearity
     This will apply a exponential decay factor based on time so
     maximum power will be available after 3*tau (typically 3*10sec = 30sec)
+
+    Une image vaut mille mots
+
+    ^                            ^
+    |      ___                   |
+    |     |   |           =>     |       .-.
+    | ____|   |______            | ___.-`   `-.___
+    |__________________          |__________________
+    
+    
+    Decay is calculated as a log function applied from the starting time 
+    of the system (or its change of value).
+    Meaning that even if the block isn't executed in the mean time, the day we'll read
+    the output, we'll get the value where it should be.
+    
     """
 
     def __init__(self, tau=10):
@@ -100,7 +115,8 @@ class InputElement(object):
     @staticmethod
     def get_value(item):
         """
-        This will cover the case of a BAC0.point
+        This will cover the case of a BAC0.point or Systems that
+        could also become the "input" of another system
         """
         if isinstance(item, Point):
             return item.lastValue
@@ -271,13 +287,13 @@ class FlexibleInput(object):
 class System(object):
     """
     A system is a black box. You give it an input, it will throw out an output.
-    This class must be subclassed by more specific systems containint a method
+    This class must be subclassed by more specific systems containing a method
     called "process". This will define the behaviour of the system.
 
     Input of a system can be another system. This will allow cascading systems
     to create something more complex.
 
-    Timing is provided so eventually, we'll cover transient reaction of systems.
+    Timing is provided to cover transient reaction of systems.
 
     """
 
@@ -380,8 +396,8 @@ class System(object):
 
 class PASSTHRU(System):
     """
-    Simple system that adds the values contained in the input
-    Input must be a list of things to add
+    Simple system that takes the values contained in the input
+    and give it back in its output
     """
 
     INPUT_ELEMENTS = _ELEMENTS(min=1, max=1)
@@ -400,8 +416,8 @@ class PASSTHRU(System):
 
 class SELECT(System):
     """
-    Simple system that adds the values contained in the input
-    Input must be a list of things to add
+    System to be used to make selection between inputs.
+    The selected input becomes the output
     """
 
     INPUT_ELEMENTS = _ELEMENTS(min=2, max=2)
@@ -631,6 +647,9 @@ class TRANSIENT(System):
     System that will increase or decrease an input
     min_output serves in some cases like cooling valves where output 
     temperature could not go lower than chilled water temperature.
+
+    This system use the dampening function 
+
     """
 
     INPUT_ELEMENTS = _ELEMENTS(min=1, max=1)

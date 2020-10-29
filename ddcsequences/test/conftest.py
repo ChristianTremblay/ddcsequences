@@ -9,7 +9,9 @@ import pytest
 import BAC0
 from yaml import load, dump, FullLoader
 import os
+from collections import namedtuple
 
+from BAC0.core.devices.local.object import ObjectFactory
 from BAC0.core.devices.create_objects import (
     create_AV,
     create_MV,
@@ -27,7 +29,14 @@ from bacpypes.local.object import (
     BinaryOutputCmdObject,
     BinaryValueCmdObject,
 )
-from bacpypes.object import AnalogInputObject, BinaryInputObject, register_object_type
+from bacpypes.object import (
+    AnalogInputObject,
+    BinaryInputObject,
+    BinaryOutputObject,
+    AnalogValueObject,
+    BinaryValueObject,
+    register_object_type,
+)
 from bacpypes.basetypes import EngineeringUnits
 from bacpypes.primitivedata import CharacterString
 
@@ -40,6 +49,39 @@ from bacpypes.basetypes import EngineeringUnits
 
 # from ddcsequences.simulate.equipment import Pump
 from ddcsequences.simulate.equipment import generate, Equipment
+
+BACNET_OBJECTS = [
+    ObjectFactory.definition(
+        "P1-C",
+        BinaryOutputObject,
+        1,
+        None,
+        "Pump P-1 Command",
+        "inactive",
+        True,
+        "inactive",
+    ),
+    ObjectFactory.definition(
+        "P1-S",
+        BinaryInputObject,
+        1,
+        None,
+        "Pump P-1 Status",
+        "inactive",
+        True,
+        "inactive",
+    ),
+    ObjectFactory.definition(
+        "LEVEL0-IN",
+        BinaryInputObject,
+        2,
+        None,
+        "Tank Level 0 Bi",
+        "inactive",
+        True,
+        "inactive",
+    ),
+]
 
 # params_file = os.path.join(os.getcwd(), "ddcsequences/test/equipments_params.yaml")
 test_equipments = {
@@ -71,13 +113,9 @@ test_equipments = {
 
 @pytest.fixture(scope="session")
 def network_and_devices():
-    # Register class to activate behaviours
-    register_object_type(AnalogOutputCmdObject, vendor_id=842)
-    register_object_type(AnalogValueCmdObject, vendor_id=842)
-    register_object_type(BinaryOutputCmdObject, vendor_id=842)
-    register_object_type(BinaryValueCmdObject, vendor_id=842)
-
-    bacnet = BAC0.lite()
+    test_device = BAC0.lite()
+    bacnet_objects = ObjectFactory.from_list(BACNET_OBJECTS)
+    bacnet_objects.add_objects_to_application(test_device)
 
     def _add_points(device):
         # Add a lot of points for tests (segmentation required)

@@ -21,9 +21,9 @@ from ...simulate.system import (
 )
 
 
-class Pump(OnOffDevice):
+class Fan(OnOffDevice):
     """
-    A pump is an OnOffDevice to which we add a TRANSIENT system
+    A Fan is an OnOffDevice to which we add a TRANSIENT system
     This system will model the way flow and pressure are impacted 
     by the start, stop and possible modulation of the pump.
 
@@ -40,9 +40,9 @@ class Pump(OnOffDevice):
         self,
         start_command=False,
         modulation=100,
-        succion_pressure=10,
-        delta_p=5,
-        max_flow=400,
+        succion_pressure=0,
+        delta_p=150,
+        max_flow=2000,
         amperage=1,
         name=None,
         description=None,
@@ -113,12 +113,3 @@ class ParallelPumps(EquipmentGroup):
         for each in self.members:
             _pressure += each.pressure()
         return _pressure
-
-
-class Heater(Equipment):
-    def __init__(self, kw=10, ls=50):
-        self._equipment = HEAT(ValueCommandElement(), kw=1, ls=50)
-        self.systems = [self._equipment]
-
-    def set_flow(self, value):
-        self._equipment.ls = value
